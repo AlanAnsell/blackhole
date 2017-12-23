@@ -3,47 +3,35 @@
 
 void Cell::init(CellID id, Cell * cells) {
     id_ =  id;
-    degree_ = N_ADJ[id_];
     value_ = 0;
-    for (size_t i = 0; i < degree_; i++) {
-        adj_[i] = cells + ADJ[id_][i];
-        loc_[ADJ[id_][i]] = i;
-    }
+    board_ = cells;
+    size_t degree = N_ADJ[id_];
+    for (size_t i = 0; i < degree; i++)
+        adj_.add(ADJ[id_][i]);
 }
 
 
 void Cell::remove_neighbour(CellID neighbour_id, Value stone_value) {
     value_ += stone_value;
-    degree_--;
-    if (degree_) {
-        size_t neighbour_loc = loc_[neighbour_id];
-        Cell * last_adj = adj_[degree_];
-        loc_[last_adj->id_] = neighbour_loc;
-        adj_[neighbour_loc] = last_adj;
-    }
+    adj_.remove(neighbour_id);
 }
 	
 
-void Cell::add_neighbour(CellID neighbour_id, Cell * neighbour, Value stone_value) {
+void Cell::add_neighbour(CellID neighbour_id, Value stone_value) {
     value_ -= stone_value;
-    size_t old_loc = loc_[neighbour_id];
-    Cell * new_neighbour = adj_[old_loc];
-    loc_[new_neighbour->id_] = degree_;
-    adj_[degree_] = new_neighbour;
-    adj_[old_loc] = neighbour;
-    degree_++;
+    adj_.readd(neighbour_id);
 }
 
 
 void Cell::fill(Value stone_value) {
-    for (size_t i = 0; i < degree_; i++)
-        adj_[i]->remove_neighbour(id_, stone_value);
+    for (size_t i = 0; i < adj_.len_; i++)
+        board_[adj_.val_[i]].remove_neighbour(id_, stone_value);
 }
 
 
 void Cell::unfill(Value stone_value) {
-    for (size_t i = 0; i < degree_; i++)
-        adj_[i]->add_neighbour(id_, this, stone_value);
+    for (size_t i = 0; i < adj_.len_; i++)
+        board_[adj_.val_[i]].add_neighbour(id_, stone_value);
 }
 
 
@@ -63,18 +51,15 @@ void Move::to_str(char * str) {
 }
 
 
-Position::Position(CellID blocked[N_BLOCKED_CELLS]): n_open_(0), turn_(RED) {
+Position::Position(CellID blocked[N_BLOCKED_CELLS]): open_(N_CELLS, N_CELLS), turn_(RED) {
     size_t i;
     bool is_blocked[N_CELLS] = {false};
     for (i = 0; i < N_BLOCKED_CELLS; i++)
         is_blocked[blocked[i]] = true;
     for (i = 0; i < N_CELLS; i++) {
         cells_[i].init(i, cells_);
-        if (! is_blocked[i]) {
-            open_cells_[n_open_] = i;
-            open_loc_[i] = n_open_;
-            n_open_++;
-        }
+        if (! is_blocked[i])
+            open_.add(i);
     }
     for (i = 0; i < N_BLOCKED_CELLS; i++)
         cells_[blocked[i]].fill(0);
@@ -102,11 +87,7 @@ void Position::make_move(const Move& move) {
     
     //printf("Deleting cell\n");
     //fflush(stdout);
-    n_open_--;
-    size_t move_loc = open_loc_[move.cell_];
-    CellID last_cell = open_cells_[n_open_];
-    open_cells_[move_loc] = last_cell;
-    open_loc_[last_cell] = move_loc;
+    open_.remove(move.cell_);
     
     //printf("Filling cell\n");
     //fflush(stdout);
@@ -125,35 +106,84 @@ void Position::unmake_move(const Move& move) {
         stones[i] = stones[i-1];
     stones[i] = stone_number;
     n_stones++;
-    
-    size_t old_loc = open_loc_[move.cell_];
-    size_t new_cell = open_cells_[old_loc];
-    open_loc_[new_cell] = n_open_;
-    open_cells_[n_open_] = new_cell;
-    open_cells_[old_loc] = move.cell_;
-    n_open_++;
+   
+    open_.readd(move.cell_); 
     
     cells_[move.cell_].unfill(move.stone_value_);
 }
 
 
+size_t Position::dead_endgame_solve(Value alpha) {
+    size_t controls[2] = {0};
+    Value offset[2];
+    offset[RED] = 0;
+    offset[BLUE] = 1;
+    for (size_t p = 0; p < 2; p++) {
+        size_t op = 1 - p;
+        size_t n_stones = n_stones_[p];
+        Value * stones = stones_[p];
+        Value power[MAX_DEGREE+1];
+        power[0] = 0;
+        size_t i;
+        for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++)
+            power[i] = power[i-1] + stones[n_stones-i] * parity[p];
+        size_t max_our_stones = i;
+        for (i = 0; i < n_stones_[op] && i + max_our_stones <= MAX_DEGREE; i++)
+            power[i + max_our_stones] = power[i + max_our_stones - 1] + stones_[op][i] * parity[op];
+        for (i = 0; i < open_.len_; i++) {
+            Cell& cell = cells_[open_.val_[i]];
+            Value best_val = cell.value_ + power[cell.adj_.len_];
+            if (best_val * parity[p] < (alpha - offset[p]) * parity[p])
+                controls[op]++;
+        }
+    }
+    if (controls[RED] > n_stones_[BLUE])
+        return RED;
+    if (controls[BLUE] > n_stones_[RED])
+        return BLUE;
+    return NO_RESULT;
+}
+
+
+Value Position::dead_endgame_value() {
+    Value lb = MIN_RESULT;
+    Value ub = MAX_RESULT;
+    while (lb < ub) {
+        Value mid = (lb + ub + 1) / 2;
+        size_t result = dead_endgame_solve(mid);
+        if (result == NO_RESULT)
+            return NO_RESULT;
+        if (result == RED)
+            lb = mid;
+        else
+            ub = mid - 1;
+    }
+    return lb;
+}
+
+
 Move Position::get_random_move() {
-    return Move(open_cells_[rand() % n_open_],
+    return Move(open_.val_[rand() % open_.len_],
                 parity[turn_] * stones_[turn_][rand() % n_stones_[turn_]]);
 }
 
 
-Move Position::get_expectation_maximising_move() {
+Move Position::get_expectation_maximising_move_with_endgame_solve() {
     Move best_move(0, 0);
     Real best_expectation = -1000.0;
     Value * stones = stones_[turn_];
     size_t n_stones = n_stones_[turn_];
-    for (size_t i = 0; i < n_open_; i++) {
+    for (size_t i = 0; i < open_.len_; i++) {
         for (size_t j = 0; j < n_stones; j++) {
             Value stone_value = parity[turn_] * stones[j];
-            Move move(open_cells_[i], stone_value);
+            Move move(open_.val_[i], stone_value);
             make_move(move);
-            Real expectation = calculate_expectation();
+            Real expectation;
+            Value endgame_result = dead_endgame_value();
+            if (endgame_result == NO_RESULT)
+                expectation = calculate_expectation();
+            else
+                expectation = (Real)endgame_result;
             unmake_move(move);
             expectation *= parity[turn_];
             if (expectation > best_expectation) {
@@ -169,17 +199,17 @@ Move Position::get_expectation_maximising_move() {
 Real Position::search_expectation() {
     //printf("Entering search_expectation\n");
     //fflush(stdout);
-    if (n_open_ == 1) {
+    if (open_.len_ == 1) {
         //print();
-        return (Real)(cells_[open_cells_[0]].value_);
+        return (Real)(cells_[open_.val_[0]].value_);
     }
     Real sum = 0.0;
     Value * stones = stones_[turn_];
     size_t n_stones = n_stones_[turn_];
-    for (size_t i = 0; i < n_open_; i++) {
+    for (size_t i = 0; i < open_.len_; i++) {
         for (size_t j = 0; j < n_stones; j++) {
             Value stone_value = parity[turn_] * stones[j];
-            Move move(open_cells_[i], stone_value);
+            Move move(open_.val_[i], stone_value);
             make_move(move);
             sum += search_expectation();
             unmake_move(move);
@@ -187,35 +217,36 @@ Real Position::search_expectation() {
     }
     //printf("Exiting search_expectation\n");
     //fflush(stdout);
-    return sum / (n_open_ * n_stones);
+    return sum / (open_.len_ * n_stones);
 }
 
 
 Real Position::calculate_expectation() {
-    if (n_open_ == 1)
-        return (Real)(cells_[open_cells_[0]].value_);
+    if (open_.len_ == 1)
+        return (Real)(cells_[open_.val_[0]].value_);
     Real sum = 0.0;
     Real stone_sum = 0.0;
     size_t i, j;
     for (i = 0; i < 2; i++)
         for (j = 0; j < n_stones_[i]; j++)
             stone_sum += parity[i] * stones_[i][j];
-    for (i = 0; i < n_open_; i++) {
-        Cell& cell = cells_[open_cells_[i]];
-        sum += cell.value_ + cell.degree_ * stone_sum / (n_open_ - 1);
+    for (i = 0; i < open_.len_; i++) {
+        Cell& cell = cells_[open_.val_[i]];
+        sum += cell.value_ + cell.adj_.len_ * stone_sum / (open_.len_ - 1);
     }
-    return sum / n_open_;
+    return sum / open_.len_;
 }
     
 
 void Position::print() {
     size_t i, j;
-    for (i = 0; i < n_open_; i++) {
+    for (i = 0; i < open_.len_; i++) {
         char cell_str[10];
-        cell_id_to_name(open_cells_[i], cell_str);
-        printf("%s (%d):", cell_str, cells_[open_cells_[i]].value_);
-        for (j = 0; j < cells_[open_cells_[i]].degree_; j++) {
-            cell_id_to_name(cells_[open_cells_[i]].adj_[j]->id_, cell_str);
+        cell_id_to_name(open_.val_[i], cell_str);
+        Cell& cell = cells_[open_.val_[i]];
+        printf("%s (%d):", cell_str, cell.value_);
+        for (j = 0; j < cell.adj_.len_; j++) {
+            cell_id_to_name(cell.adj_.val_[j], cell_str);
             printf(" %s", cell_str);
         }
         printf("\n");

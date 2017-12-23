@@ -16,9 +16,12 @@
 #define N_ROWS 8
 #define RED 0
 #define BLUE 1
+#define NO_RESULT 400
 #define MAX_DEGREE 6
 #define N_STONES 15
 #define N_BLOCKED_CELLS 5
+#define MIN_RESULT -75
+#define MAX_RESULT 75
 
 typedef int Value;
 typedef size_t CellID;

@@ -26,7 +26,7 @@
 typedef int Value;
 typedef size_t CellID;
 typedef double Real;
-typedef long long Bitmask;
+typedef int Bitmask;
 
 extern const char * ENGINE_NAME;
 extern const char * VERSION_NUMBER;

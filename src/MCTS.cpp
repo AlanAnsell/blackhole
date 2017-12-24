@@ -23,8 +23,6 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move) {
     n_untried_moves_ = pos.open_.len_ * pos.n_stones_[pos.turn_];
     expanded_ = false;
     n_children_fully_explored_ = 0;
-    for (size_t i = 0; i < N_STONES; i++)
-        table_[i] = 0;
 }
 
 
@@ -47,30 +45,63 @@ MCTNode * MCTNode::select(Position& pos) {
 
 
 MCTNode * MCTNode::expand(Position& pos) {
+    Bitmask mask;
     if (! expanded_) {
-        //pos.get_moves_with_heuristic(untried_moves_);
-        //std::sort(untried_moves_.begin(), untried_moves_.end());
-        pos.get_all_moves(untried_moves_);
-        std::random_shuffle(untried_moves_.begin(), untried_moves_.end());
+        //fprintf(stderr, "Expanding\n");
+        //fflush(stderr);
+        size_t n_stones = pos.n_stones_[pos.turn_];
+        Value * stones = pos.stones_[pos.turn_];
+        mask = 0;
+        size_t i;
+        for (i = 0; i < n_stones; i++)
+            mask |= (1 << (stones[i] - 1));
+        for (i = 0; i < pos.open_.len_; i++) {
+            table_[i] = mask;
+            n_cell_moves_[i] = (unsigned char)n_stones;
+        }
+        n_untried_moves_ = n_stones * pos.open_.len_;
         expanded_ = true;
     }
-    //Real val = untried_moves_.back().first * parity[pos.turn_];
-    //Move move = untried_moves_.back().second;
-    Move move = untried_moves_.back();
-    Real val = 0.0;
-    if (pos.open_.len_ == 2) {
-        pos.make_move(move);
-        val = pos.cells_[pos.open_.val_[0]].value_;
-        pos.unmake_move(move);
-    }
-    untried_moves_.pop_back();
+    
+    //fprintf(stderr, "Finding cell\n");
+    //fflush(stderr);
+    size_t r = rand() % n_untried_moves_;
+    size_t cell_count;
+    size_t move_count = 0;
+    for (cell_count = 0; move_count + n_cell_moves_[cell_count] <= r; cell_count++)
+        move_count += n_cell_moves_[cell_count];
+    CellID cell = pos.open_.val_[cell_count];
+    r -= move_count;
+
+    //fprintf(stderr, "Finding stone\n");
+    //fflush(stderr);
+    mask = table_[cell_count];
+    size_t stone_number;
+    size_t stone_count = 0;
+    for (stone_number = 0; stone_count <= r; stone_number++)
+        stone_count += (mask & (1 << stone_number)) >> stone_number;
+    
+    //fprintf(stderr, "Updating\n");
+    //fflush(stderr);
+    table_[cell_count] ^= (1 << (stone_number - 1));
+    n_cell_moves_[cell_count]--;
+    n_untried_moves_--;
+
+    //fprintf(stderr, "Creating new node\n");
+    //fflush(stderr);
+    Move move(cell, stone_number * parity[pos.turn_]);
+    //char move_str[10];
+    //move.to_str(move_str);
+    //pos.print(stderr);
+    //fprintf(stderr, "New move: %s\n", move_str);
+    //fflush(stderr);
+    pos.make_move(move);
     MCTNode * new_node = get_free();
-    new_node->init(this, move, pos.open_.len_ == 2, val);
+    new_node->init(this, pos, move);
     children_.push_back(new_node);
-    /*if (new_node->fully_explored_) {
-        fprintf(stderr, "Added new terminal node to tree\n");
-        fflush(stdout);
-    }*/
+    pos.unmake_move(move);
+    //fprintf(stderr, "Finished expanding\n");
+    //fflush(stderr);
     return new_node;
 }
 
@@ -106,7 +137,7 @@ Value MCTNode::light_playout(Position& pos) {
 
 void MCTNode::ucb(Position& pos) {
     MCTNode * search_root = this;
-    while (search_root->expanded_ && search_root->untried_moves_.size() == 0) {
+    while (search_root->expanded_ && search_root->n_untried_moves_ == 0) {
         //fprintf(stderr, "selecting\n");
         //fflush(stderr);
         search_root = search_root->select(pos);
@@ -160,7 +191,7 @@ void MCTNode::ucb(Position& pos) {
                 parent->n_children_fully_explored_++;
                 //fprintf(stderr, "Checking if search root fully explored\n");
                 //fflush(stderr);
-                if ((parent->untried_moves_.size() == 0) &&
+                if ((parent->n_untried_moves_ == 0) &&
                         (parent->n_children_fully_explored_ == parent->children_.size())) {
                     parent->fully_explored_ = true;
                     //fprintf(stderr, "Search root fully explored\n");
@@ -207,9 +238,15 @@ Move MCTNode::get_most_played_move() {
 Move MCTNode::get_best_move(Position& pos) {
     long long start_micros = get_time();
     long long time_now = start_micros;
-    while (! fully_explored_ && time_now - start_micros < 300000LL) {
-        for (size_t i = 0; i < 100 && ! fully_explored_; i++)
+    long long move_time = 300000LL;
+    while (! fully_explored_ && time_now - start_micros < move_time) {
+        for (size_t i = 0; i < 100 && ! fully_explored_; i++) {
+            //fprintf(stderr, "Running UCB\n");
+            //fflush(stderr);
             ucb(pos);
+            //fprintf(stderr, "Finished running UCB\n");
+            //fflush(stderr);
+        }
         time_now = get_time();
     }
     fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts_, (double)(time_now - start_micros) / 1e6);

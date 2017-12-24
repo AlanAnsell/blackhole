@@ -74,11 +74,15 @@ public:
     CellID cell_;
     Value stone_value_;
 
+    Move(): cell_(0), stone_value_(0) {}
+
     Move(CellID cell, Value stone_value): cell_(cell), stone_value_(stone_value) {}
 
     Move(char * move_str, size_t turn);
 
     void to_str(char * str);
+
+    bool operator < (const Move& other) const;
 };
 
 
@@ -107,9 +111,11 @@ public:
 
 	Real search_expectation();
 
-	Real calculate_expectation();		
+	Real calculate_expectation() const;		
 
-    void print();    
+    void get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves);
+
+    void print(FILE * f);    
 };
 
 #endif

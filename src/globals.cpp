@@ -60,7 +60,9 @@ CellID cell_name_to_id(const char * name) {
 
 void init() {
 	fprintf(stderr, "R %s %s\n", ENGINE_NAME, VERSION_NUMBER);
-	srand(time(NULL));
+#ifndef DEBUG_
+    srand(time(NULL));
+#endif
 
     CellID id = 0;
     size_t row, num;
@@ -92,3 +94,5 @@ void init() {
 
 }
 
+
+const Real UCB_C = sqrt(2.0);

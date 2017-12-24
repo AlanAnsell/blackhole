@@ -51,6 +51,13 @@ void Move::to_str(char * str) {
 }
 
 
+bool Move::operator < (const Move& other) const {
+    if (cell_ != other.cell_)
+        return cell_ < other.cell_;
+    return stone_value_ < other.stone_value_;
+}
+
+
 Position::Position(CellID blocked[N_BLOCKED_CELLS]): open_(N_CELLS, N_CELLS), turn_(RED) {
     size_t i;
     bool is_blocked[N_CELLS] = {false};
@@ -221,7 +228,7 @@ Real Position::search_expectation() {
 }
 
 
-Real Position::calculate_expectation() {
+Real Position::calculate_expectation() const {
     if (open_.len_ == 1)
         return (Real)(cells_[open_.val_[0]].value_);
     Real sum = 0.0;
@@ -231,33 +238,49 @@ Real Position::calculate_expectation() {
         for (j = 0; j < n_stones_[i]; j++)
             stone_sum += parity[i] * stones_[i][j];
     for (i = 0; i < open_.len_; i++) {
-        Cell& cell = cells_[open_.val_[i]];
+        const Cell& cell = cells_[open_.val_[i]];
         sum += cell.value_ + cell.adj_.len_ * stone_sum / (open_.len_ - 1);
     }
     return sum / open_.len_;
 }
-    
+   
 
-void Position::print() {
+void Position::get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves) {
+    Value * stones = stones_[turn_];
+    size_t n_stones = n_stones_[turn_];
+    for (size_t i = 0; i < open_.len_; i++) {
+        for (size_t j = 0; j < n_stones; j++) {
+            Value stone_value = parity[turn_] * stones[j];
+            Move move(open_.val_[i], stone_value);
+            make_move(move);
+            Real expectation = calculate_expectation();
+            unmake_move(move);
+            moves.push_back(std::make_pair(parity[turn_] * expectation, move));
+        }
+    }
+}
+
+
+void Position::print(FILE * f) {
     size_t i, j;
     for (i = 0; i < open_.len_; i++) {
         char cell_str[10];
         cell_id_to_name(open_.val_[i], cell_str);
         Cell& cell = cells_[open_.val_[i]];
-        printf("%s (%d):", cell_str, cell.value_);
+        fprintf(f, "%s (%d):", cell_str, cell.value_);
         for (j = 0; j < cell.adj_.len_; j++) {
             cell_id_to_name(cell.adj_.val_[j], cell_str);
-            printf(" %s", cell_str);
+            fprintf(f, " %s", cell_str);
         }
-        printf("\n");
+        fprintf(f, "\n");
     }
-    printf("Red:");
+    fprintf(f, "Red:");
     for (i = 0; i < n_stones_[RED]; i++)
-        printf(" %d", stones_[RED][i] * parity[RED]);
-    printf("\nBlue:");
+        fprintf(f, " %d", stones_[RED][i] * parity[RED]);
+    fprintf(stderr, "\nBlue:");
     for (i = 0; i < n_stones_[BLUE]; i++)
-        printf(" %d", stones_[BLUE][i] * parity[BLUE]);
-    printf("\n");
+        fprintf(stderr, " %d", stones_[BLUE][i] * parity[BLUE]);
+    fprintf(stderr, "\n");
 }
 
 

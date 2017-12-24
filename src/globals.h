@@ -56,4 +56,8 @@ CellID cell_name_to_id(const char * name);
 
 void init();
 
+
+#define N_MCT_NODES 1000000
+
+extern const Real UCB_C;
 #endif

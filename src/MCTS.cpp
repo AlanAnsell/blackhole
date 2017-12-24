@@ -196,8 +196,14 @@ Move MCTNode::get_most_played_move() {
 
 
 Move MCTNode::get_best_move(Position& pos) {
-    for (size_t i = 0; i < 5000 && ! fully_explored_; i++)
-        ucb(pos);
+    long long start_micros = get_time();
+    long long time_now = start_micros;
+    while (! fully_explored_ && time_now - start_micros < 300000LL) {
+        for (size_t i = 0; i < 100 && ! fully_explored_; i++)
+            ucb(pos);
+        time_now = get_time();
+    }
+    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts_, (double)(time_now - start_micros) / 1e6);
 
     if (fully_explored_) {
         fprintf(stderr, "Search tree fully explored\n");

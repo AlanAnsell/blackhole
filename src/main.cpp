@@ -57,4 +57,5 @@ int main(int argc, char** argv) {
 
 
 // EventHorizon0_0_0: plays move which maximises expected pure Monto-Carlo value
-// EventHorizon1_0_0: untuned UCT implementation
+// EventHorizon1_0_0: untuned UCT implementation, scores -8 vs 0_0_0 (100 games)
+// EventHorizon1_0_1: 0.3s/move, scores -3.66 vs 0_0_0 (100 games)

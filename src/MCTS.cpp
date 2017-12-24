@@ -9,15 +9,16 @@ void MCTNode::dispose() {
 }
 
 
-void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move) {
+void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Value alpha) {
     move_= move;
     parent_ = parent;
+    alpha_ = alpha;
     fully_explored_ = pos.open_.len_ == 1;
     if (fully_explored_)
-        val_ = pos.cells_[pos.open_.val_[0]].value_;
+        val_ = (pos.cells_[pos.open_.val_[0]].value_ >= alpha_) ? 1.0 : 0.0;
     else
         val_ = 0.0;
-    result_sum_ = 0.0;
+    n_red_wins_ = 0;
     n_playouts_ = 0;
     children_.clear();
     n_untried_moves_ = pos.open_.len_ * pos.n_stones_[pos.turn_];
@@ -29,11 +30,14 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move) {
 MCTNode * MCTNode::select(Position& pos) {
     // Should only be called if all moves have been tried
     MCTNode * best_node = NULL;
-    Real best_value = -1000.0;
+    Real best_value = -1.0;
     for (size_t i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (! child->fully_explored_) {
-            Real ucb_value = child->val_ * parity[pos.turn_] + UCB_C * sqrt(log(n_playouts_) / child->n_playouts_);
+            Real child_val = child->val_;
+            if (pos.turn_ == BLUE)
+                child_val = 1 - child_val;
+            Real ucb_value = child_val + UCB_C * sqrt(log(n_playouts_) / child->n_playouts_);
             if (ucb_value > best_value) {
                 best_node = child;
                 best_value = ucb_value;
@@ -97,7 +101,7 @@ MCTNode * MCTNode::expand(Position& pos) {
     //fflush(stderr);
     pos.make_move(move);
     MCTNode * new_node = get_free();
-    new_node->init(this, pos, move);
+    new_node->init(this, pos, move, alpha_);
     children_.push_back(new_node);
     pos.unmake_move(move);
     //fprintf(stderr, "Finished expanding\n");
@@ -108,7 +112,7 @@ MCTNode * MCTNode::expand(Position& pos) {
 
 Move playout_moves[N_CELLS];
 
-Value MCTNode::light_playout(Position& pos) {
+bool MCTNode::light_playout(Position& pos) {
     int move_count;
     //char move_str[10];
     for (move_count = 0; pos.open_.len_ > 1; move_count++) {
@@ -120,7 +124,7 @@ Value MCTNode::light_playout(Position& pos) {
     }
     //fprintf(stderr, "Playout reached end of game\n");
     //fflush(stderr);
-    Value result = pos.cells_[pos.open_.val_[0]].value_;
+    bool result = (pos.cells_[pos.open_.val_[0]].value_ >= alpha_);
     //fprintf(stderr, "Playout result = %d\n", result);
     //fflush(stderr);
     for (move_count--; move_count >= 0; move_count--) {
@@ -166,7 +170,7 @@ void MCTNode::ucb(Position& pos) {
         fprintf(stderr, "Should now be in final position\n");
         fflush(stderr);
     }*/
-    Value result = 0;
+    size_t result = 0;
     if (! search_root->fully_explored_)
         result = search_root->light_playout(pos);
     //fprintf(stderr, "Playout completed with result %d\n", result);
@@ -181,9 +185,9 @@ void MCTNode::ucb(Position& pos) {
             search_root->val_ *= parity[pos.turn_];
         }
         if (! search_root->fully_explored_) {
-            search_root->result_sum_ += result;
+            search_root->n_red_wins_ += result;
             search_root->n_playouts_++;
-            search_root->val_ = search_root->result_sum_ / search_root->n_playouts_;
+            search_root->val_ = Real(search_root->n_red_wins_) / Real(search_root->n_playouts_);
         }
         if (parent !=  NULL) {
             pos.unmake_move(search_root->move_);

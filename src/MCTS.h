@@ -7,8 +7,9 @@ public:
     Move move_;
     MCTNode * parent_;
 
+    Value alpha_;
     Real val_;
-    Real result_sum_;
+    size_t n_red_wins_;
     size_t n_playouts_;
 
     bool fully_explored_;
@@ -24,7 +25,7 @@ public:
     unsigned char n_cell_moves_[N_CELLS];
     size_t n_untried_moves_;
 
-    void init(MCTNode * parent, const Position& pos, const Move& move);
+    void init(MCTNode * parent, const Position& pos, const Move& move, Value alpha);
 
     void ucb(Position& pos);
     
@@ -32,7 +33,7 @@ public:
 
     MCTNode * expand(Position& pos);
 
-    Value light_playout(Position& pos);
+    bool light_playout(Position& pos);
 
     Move get_best_move(Position& pos);
 

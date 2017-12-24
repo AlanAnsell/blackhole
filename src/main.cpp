@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
 #endif
         //fprintf(stderr, "Creating MCTS tree\n");
         //fflush(stderr);
-        root->init(NULL, pos, Move());
+        root->init(NULL, pos, Move(), 0);
         //fprintf(stderr, "Performing MCTS search\n");
         //fflush(stderr);
         Move move = root->get_best_move(pos);
@@ -60,4 +60,5 @@ int main(int argc, char** argv) {
 // EventHorizon1_0_0: untuned UCT implementation, scores -8 vs 0_0_0 (100 games)
 // EventHorizon1_0_1: 0.3s/move, scores -3.66 vs 0_0_0 (100 games)
 // EventHorizon1_0_2: remove move ordering, scores -2.82 vs 0_0_0 (100 games)
-// EventHorizon1_0_3: use bitmask move table, scores  vs 0_0_0 (100 games)
+// EventHorizon1_0_3: use bitmask move table, scores -2.55  vs 0_0_0 (100 games)
+// EventHorizon1_1_0: fixed target of 0, wins a lot of games by 1 point, loses horribly when it loses, scores -8.86  vs 0_0_0 (100 games)

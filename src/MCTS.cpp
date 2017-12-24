@@ -48,12 +48,21 @@ MCTNode * MCTNode::select(Position& pos) {
 
 MCTNode * MCTNode::expand(Position& pos) {
     if (! expanded_) {
-        pos.get_moves_with_heuristic(untried_moves_);
-        std::sort(untried_moves_.begin(), untried_moves_.end());
+        //pos.get_moves_with_heuristic(untried_moves_);
+        //std::sort(untried_moves_.begin(), untried_moves_.end());
+        pos.get_all_moves(untried_moves_);
+        std::random_shuffle(untried_moves_.begin(), untried_moves_.end());
         expanded_ = true;
     }
-    Real val = untried_moves_.back().first * parity[pos.turn_];
-    Move move = untried_moves_.back().second;
+    //Real val = untried_moves_.back().first * parity[pos.turn_];
+    //Move move = untried_moves_.back().second;
+    Move move = untried_moves_.back();
+    Real val = 0.0;
+    if (pos.open_.len_ == 2) {
+        pos.make_move(move);
+        val = pos.cells_[pos.open_.val_[0]].value_;
+        pos.unmake_move(move);
+    }
     untried_moves_.pop_back();
     MCTNode * new_node = get_free();
     new_node->init(this, move, pos.open_.len_ == 2, val);

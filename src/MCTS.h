@@ -17,7 +17,8 @@ public:
     size_t n_children_fully_explored_;
     std::vector<MCTNode*> children_;
     //MCTNode ** table_[N_CELLS];
-    std::vector<std::pair<Real, Move>> untried_moves_;
+    //std::vector<std::pair<Real, Move>> untried_moves_;
+    std::vector<Move> untried_moves_;
 
     void init(MCTNode * parent, const Move& move, bool terminal, Real val);
 

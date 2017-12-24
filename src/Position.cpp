@@ -261,6 +261,19 @@ void Position::get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& move
 }
 
 
+void Position::get_all_moves(std::vector<Move>& moves) {
+    Value * stones = stones_[turn_];
+    size_t n_stones = n_stones_[turn_];
+    for (size_t i = 0; i < open_.len_; i++) {
+        for (size_t j = 0; j < n_stones; j++) {
+            Value stone_value = parity[turn_] * stones[j];
+            Move move(open_.val_[i], stone_value);
+            moves.push_back(move);
+        }
+    }
+}
+
+
 void Position::print(FILE * f) {
     size_t i, j;
     for (i = 0; i < open_.len_; i++) {

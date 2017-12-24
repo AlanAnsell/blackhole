@@ -115,6 +115,8 @@ public:
 
     void get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves);
 
+    void get_all_moves(std::vector<Move>& moves);
+
     void print(FILE * f);    
 };
 

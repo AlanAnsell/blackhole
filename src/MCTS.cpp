@@ -9,22 +9,22 @@ void MCTNode::dispose() {
 }
 
 
-void MCTNode::init(MCTNode * parent, const Move& move, bool terminal, Real val) {
+void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move) {
     move_= move;
     parent_ = parent;
-    fully_explored_ = terminal;
-    if (terminal)
-        val_ = val;
+    fully_explored_ = pos.open_.len_ == 1;
+    if (fully_explored_)
+        val_ = pos.cells_[pos.open_.val_[0]].value_;
     else
         val_ = 0.0;
     result_sum_ = 0.0;
     n_playouts_ = 0;
     children_.clear();
-    untried_moves_.clear();
+    n_untried_moves_ = pos.open_.len_ * pos.n_stones_[pos.turn_];
     expanded_ = false;
     n_children_fully_explored_ = 0;
-    //for (size_t i = 0; i < N_CELLS; i++)
-    //    table_[i] = NULL;
+    for (size_t i = 0; i < N_STONES; i++)
+        table_[i] = 0;
 }
 
 
@@ -35,7 +35,7 @@ MCTNode * MCTNode::select(Position& pos) {
     for (size_t i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (! child->fully_explored_) {
-            Real ucb_value = child->val_ * parity[pos.turn_] + UCB_C * sqrt(log(child->n_playouts_) / n_playouts_);
+            Real ucb_value = child->val_ * parity[pos.turn_] + UCB_C * sqrt(log(n_playouts_) / child->n_playouts_);
             if (ucb_value > best_value) {
                 best_node = child;
                 best_value = ucb_value;

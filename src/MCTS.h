@@ -16,11 +16,13 @@ public:
 
     size_t n_children_fully_explored_;
     std::vector<MCTNode*> children_;
+    Bitmask table_[N_STONES];
     //MCTNode ** table_[N_CELLS];
     //std::vector<std::pair<Real, Move>> untried_moves_;
-    std::vector<Move> untried_moves_;
+    //std::vector<Move> untried_moves_;
+    size_t n_untried_moves;
 
-    void init(MCTNode * parent, const Move& move, bool terminal, Real val);
+    void init(MCTNode * parent, const Position& pos, const Move& move);
 
     void ucb(Position& pos);
     

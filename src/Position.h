@@ -101,6 +101,8 @@ public:
     
 	void unmake_move(const Move& move);
 
+    void get_stone_power(size_t p, Value alpha, Value * power);
+
     size_t dead_endgame_solve(Value alpha);
     
     Value dead_endgame_value();

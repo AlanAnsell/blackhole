@@ -4,6 +4,7 @@ const char * ENGINE_NAME = "Blackhole";
 const char * VERSION_NUMBER = "0.0.0";
 
 int parity[2] = {1, -1};
+Value OFFSET[2] = {0, 1};
 
 long long time_limit = 4500000;
 long long time_left = time_limit;
@@ -95,4 +96,4 @@ void init() {
 }
 
 
-const Real UCB_C = sqrt(2.0);
+const Real UCB_C = 2.0;

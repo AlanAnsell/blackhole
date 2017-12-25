@@ -31,6 +31,8 @@ public:
     
     MCTNode * select(Position& pos);
 
+    void fill_move_table(Position& pos);
+
     MCTNode * expand(Position& pos);
 
     bool light_playout(Position& pos);
@@ -55,3 +57,21 @@ MCTNode * get_free();
 void put_free(MCTNode * node);
 
 void init_free_list();
+
+
+class MCTSearch {
+public:
+
+    MCTNode * roots_[MAX_RESULT * 2 + 1];
+    Value current_alpha_;
+
+    MCTSearch(const Position& pos, Value alpha);
+
+    ~MCTSearch();
+
+    MCTNode * get_or_make_root(Value alpha, const Position& pos);
+
+    Move get_best_move(Position& pos);
+
+};
+

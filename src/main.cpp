@@ -21,26 +21,22 @@ int main(int argc, char** argv) {
 	//Value endgame_value;
     if (strcmp(move_str, "Start"))
         pos.make_move(Move(move_str, pos.turn_));
-	MCTNode * root = get_free();
+	Value alpha = 0;
     while (true) {
 		fprintf(stderr, "Time left: %.2f seconds\n", (float)time_left / 1e6);
 		//endgame_value = pos.dead_endgame_value();
         //if (endgame_value != NO_RESULT)
         //    fprintf(stderr, "Solved endgame: %d\n", endgame_value);
 #ifdef DEBUG_
-        assert(n_free == N_MCT_NODES - 1);
+        assert(n_free == N_MCT_NODES);
 #endif
         //fprintf(stderr, "Creating MCTS tree\n");
         //fflush(stderr);
-        root->init(NULL, pos, Move(), 0);
+        MCTSearch search(pos, alpha);
         //fprintf(stderr, "Performing MCTS search\n");
         //fflush(stderr);
-        Move move = root->get_best_move(pos);
-        //fprintf(stderr, "Disposing MCTS tree\n");
-        //fflush(stderr);
-        root->dispose();
-        //fprintf(stderr, "Done\n");
-        //fflush(stderr);
+        Move move = search.get_best_move(pos);
+        alpha = search.current_alpha_;
 		pos.make_move(move);
 		//endgame_value = pos.dead_endgame_value();
         //if (endgame_value != NO_RESULT)

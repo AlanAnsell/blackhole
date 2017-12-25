@@ -36,7 +36,7 @@ MCTNode * MCTNode::select(Position& pos) {
         if (! child->fully_explored_) {
             Real child_val = child->val_;
             if (pos.turn_ == BLUE)
-                child_val = 1 - child_val;
+                child_val = 1.0 - child_val;
             Real ucb_value = child_val + UCB_C * sqrt(log(n_playouts_) / child->n_playouts_);
             if (ucb_value > best_value) {
                 best_node = child;
@@ -48,22 +48,51 @@ MCTNode * MCTNode::select(Position& pos) {
 }
 
 
-MCTNode * MCTNode::expand(Position& pos) {
-    Bitmask mask;
-    if (! expanded_) {
-        //fprintf(stderr, "Expanding\n");
-        //fflush(stderr);
-        size_t n_stones = pos.n_stones_[pos.turn_];
-        Value * stones = pos.stones_[pos.turn_];
-        mask = 0;
-        size_t i;
-        for (i = 0; i < n_stones; i++)
-            mask |= (1 << (stones[i] - 1));
-        for (i = 0; i < pos.open_.len_; i++) {
+void MCTNode::fill_move_table(Position& pos) {
+    size_t p = pos.turn_;
+    size_t n_stones = pos.n_stones_[p];
+    Value * stones = pos.stones_[p];
+    //Value power[MAX_DEGREE+1];
+
+    Bitmask mask = 0;
+    size_t i;
+    for (i = 0; i < n_stones; i++)
+        mask |= (1 << (stones[i] - 1));
+
+    //pos.get_stone_power(1 - p, alpha_, power);
+    
+    //bool seen_dead = false;
+    n_untried_moves_ = 0;    
+    for (i = 0; i < pos.open_.len_; i++) {
+        CellID cell_id = pos.open_.val_[i];
+        Cell& cell = pos.cells_[cell_id];
+        /*Value worst_val = cell.value_ + power[cell.adj_.len_];
+        if (worst_val * parity[p] >= (alpha_ - OFFSET[p]) * parity[p]) {
+            if (seen_dead) {
+                table_[i] = 0;
+                n_cell_moves_[i] = 0;
+            } else {
+                table_[i] = (1 << (pos.stones_[p][0] - 1));
+                n_cell_moves_[i] = 1;
+                n_untried_moves_++;
+                seen_dead = true;
+            }*/
+        if (cell.adj_.len_ == 0) {
+            table_[i] = (1 << (pos.stones_[p][0] - 1));
+            n_cell_moves_[i] = 1;
+            n_untried_moves_++;
+        } else {
             table_[i] = mask;
             n_cell_moves_[i] = (unsigned char)n_stones;
+            n_untried_moves_ += n_stones;
         }
-        n_untried_moves_ = n_stones * pos.open_.len_;
+    }
+}
+
+
+MCTNode * MCTNode::expand(Position& pos) {
+    if (! expanded_) {
+        fill_move_table(pos);
         expanded_ = true;
     }
     
@@ -79,7 +108,7 @@ MCTNode * MCTNode::expand(Position& pos) {
 
     //fprintf(stderr, "Finding stone\n");
     //fflush(stderr);
-    mask = table_[cell_count];
+    Bitmask mask = table_[cell_count];
     size_t stone_number;
     size_t stone_count = 0;
     for (stone_number = 0; stone_count <= r; stone_number++)
@@ -211,17 +240,20 @@ void MCTNode::ucb(Position& pos) {
 Move MCTNode::get_highest_value_move(Position& pos) {
     Move best_move;
     Real best_val = -1000.0;
-    fprintf(stderr, "Choosing highest value move\n");
-    pos.print(stderr);
+    size_t n_playouts = 0;
+    //fprintf(stderr, "Choosing highest value move\n");
+    //pos.print(stderr);
     for (size_t i = 0; i < children_.size(); i++) {
-        char move_str[10];
-        children_[i]->move_.to_str(move_str);
-        fprintf(stderr, "%s: %lf\n", move_str, children_[i]->val_);
+        //char move_str[10];
+        //children_[i]->move_.to_str(move_str);
+        //fprintf(stderr, "%s: %lf\n", move_str, children_[i]->val_);
         if (children_[i]->val_ * parity[pos.turn_] > best_val) {
             best_move = children_[i]->move_;
             best_val = children_[i]->val_ * parity[pos.turn_];
+            n_playouts = children_[i]->n_playouts_;
         }
     }
+    fprintf(stderr, "Selected move has %u playouts\n", n_playouts);
     return best_move;
 }
 
@@ -286,6 +318,115 @@ void init_free_list() {
     for (size_t i = 0; i < N_MCT_NODES; i++)
         free_list[i] = &node_store[i];
     n_free = N_MCT_NODES;
+}
+
+
+MCTSearch::MCTSearch(const Position& pos, Value alpha) {
+    current_alpha_ = alpha;
+    for (size_t i = 0; i < 2 * MAX_RESULT + 1; i++)
+        roots_[i] = NULL;
+}
+
+
+MCTSearch::~MCTSearch() {
+    for (size_t i = 0; i < 2 * MAX_RESULT + 1; i++) {
+        if (roots_[i] != NULL) {
+            roots_[i]->dispose();
+            put_free(roots_[i]);
+        }
+    }
+}
+
+
+MCTNode * MCTSearch::get_or_make_root(Value alpha, const Position& pos) {
+    Value index = alpha + MAX_RESULT;
+#ifdef DEBUG_
+    assert(index >= 0 && index <= 2 * MAX_RESULT);
+#endif
+    if (roots_[index] == NULL) {
+        roots_[index] = get_free();
+        roots_[index]->init(NULL, pos, Move(), alpha);
+    }
+    return roots_[index];
+}
+
+
+Move MCTSearch::get_best_move(Position& pos) {
+    long long start_micros = get_time();
+    long long time_now = start_micros;
+    long long alpha_time = 100000LL;
+    long long move_time = 300000LL;
+    size_t n_playouts = 0;
+    size_t i;
+    MCTNode * root;
+    while (time_now - start_micros < alpha_time) {
+        //fprintf(stderr, "Iterating\n");
+        //fflush(stderr);
+        root = get_or_make_root(current_alpha_, pos);
+        for (i = 0; i < 100 && ! root->fully_explored_; i++) {
+            //fprintf(stderr, "Anout to UCB\n");
+            //fflush(stderr);
+            root->ucb(pos);
+            n_playouts++;
+        } 
+        //fprintf(stderr, "Finished UCBs\n");
+        //fflush(stderr);
+        if (root->fully_explored_) {
+            if (root->val_ == 0.0 && current_alpha_ > MIN_RESULT)
+                current_alpha_--;
+            else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT)
+                current_alpha_++;
+            else {
+                fprintf(stderr, "MIN/MAX RESULT achieved\n");
+                break;
+            }
+        } else {
+            if (root->val_ >= 0.5) {
+                if (current_alpha_ < MAX_RESULT)
+                    current_alpha_++;
+            } else {
+                if (current_alpha_ > MIN_RESULT)
+                    current_alpha_--;
+            }
+        }
+        time_now = get_time();
+    }
+
+    MCTNode * search_root = NULL;
+    for (Value alpha = MIN_RESULT; alpha <= MAX_RESULT; alpha++) {
+        root = roots_[alpha + MAX_RESULT];
+        if (root != NULL) {
+            fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, root->n_playouts_, root->val_);
+            Real root_val = root->val_;
+            if (pos.turn_ == BLUE)
+                root_val = 1.0 - root_val;
+            if (root_val >= 0.5 || search_root == NULL) {
+                current_alpha_ = alpha;
+                search_root = root;
+            }
+        }
+    }
+
+    fprintf(stderr, "Alpha = %d\n", current_alpha_);
+
+    while (time_now - start_micros < move_time) {
+        for (i = 0; i < 100 && ! search_root->fully_explored_; i++) {
+            //fprintf(stderr, "Anout to UCB\n");
+            //fflush(stderr);
+            search_root->ucb(pos);
+            n_playouts++;
+        } 
+        time_now = get_time();
+    }
+
+    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts, (double)(time_now - start_micros) / 1e6);
+
+    //if (search_root->fully_explored_) {
+    //    fprintf(stderr, "Search tree fully explored\n");
+        return search_root->get_highest_value_move(pos);
+    //}
+
+    //return root->get_most_played_move();
 }
 
 

@@ -120,27 +120,30 @@ void Position::unmake_move(const Move& move) {
 }
 
 
+void Position::get_stone_power(size_t p, Value alpha, Value * power) {
+    size_t op = 1 - p;
+    size_t n_stones = n_stones_[p];
+    Value * stones = stones_[p];
+    power[0] = 0;
+    size_t i;
+    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++)
+        power[i] = power[i-1] + stones[n_stones-i] * parity[p];
+    size_t max_our_stones = i;
+    for (i = 0; i < n_stones_[op] && i + max_our_stones <= MAX_DEGREE; i++)
+        power[i + max_our_stones] = power[i + max_our_stones - 1] + stones_[op][i] * parity[op];
+}
+
+
 size_t Position::dead_endgame_solve(Value alpha) {
     size_t controls[2] = {0};
-    Value offset[2];
-    offset[RED] = 0;
-    offset[BLUE] = 1;
     for (size_t p = 0; p < 2; p++) {
         size_t op = 1 - p;
-        size_t n_stones = n_stones_[p];
-        Value * stones = stones_[p];
         Value power[MAX_DEGREE+1];
-        power[0] = 0;
-        size_t i;
-        for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++)
-            power[i] = power[i-1] + stones[n_stones-i] * parity[p];
-        size_t max_our_stones = i;
-        for (i = 0; i < n_stones_[op] && i + max_our_stones <= MAX_DEGREE; i++)
-            power[i + max_our_stones] = power[i + max_our_stones - 1] + stones_[op][i] * parity[op];
-        for (i = 0; i < open_.len_; i++) {
+        get_stone_power(p, alpha, power);
+        for (size_t i = 0; i < open_.len_; i++) {
             Cell& cell = cells_[open_.val_[i]];
             Value best_val = cell.value_ + power[cell.adj_.len_];
-            if (best_val * parity[p] < (alpha - offset[p]) * parity[p])
+            if (best_val * parity[p] < (alpha - OFFSET[p]) * parity[p])
                 controls[op]++;
         }
     }

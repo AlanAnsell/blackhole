@@ -32,6 +32,7 @@ extern const char * ENGINE_NAME;
 extern const char * VERSION_NUMBER;
 
 extern int parity[2];
+extern Value OFFSET[2];
 
 extern long long time_limit;
 extern long long time_left;

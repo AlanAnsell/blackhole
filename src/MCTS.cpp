@@ -183,27 +183,14 @@ Move playout_moves[N_CELLS];
 
 bool MCTNode::light_playout(Position& pos) {
     int move_count;
-    //char move_str[10];
     for (move_count = 0; pos.open_.len_ > 1; move_count++) {
         playout_moves[move_count] = pos.get_default_policy_move();
-        //playout_moves[move_count].to_str(move_str);
-        //fprintf(stderr, "Making move %s\n", move_str);
-        //fflush(stderr);
+        //playout_moves[move_count] = pos.get_random_move();
         pos.make_move(playout_moves[move_count]);
     }
-    //fprintf(stderr, "Playout reached end of game\n");
-    //fflush(stderr);
     bool result = (pos.cells_[pos.open_.val_[0]].value_ >= alpha_);
-    //fprintf(stderr, "Playout result = %d\n", result);
-    //fflush(stderr);
-    for (move_count--; move_count >= 0; move_count--) {
-        //playout_moves[move_count].to_str(move_str);
-        //fprintf(stderr, "Unmaking move %s\n", move_str);
-        //fflush(stderr);
+    for (move_count--; move_count >= 0; move_count--)
         pos.unmake_move(playout_moves[move_count]);
-    }
-    //fprintf(stderr, "Finished unmaking moves\n");
-    //fflush(stderr);
     return result;
 }
 
@@ -249,7 +236,9 @@ void MCTNode::ucb(Position& pos) {
             if (search_root->fully_explored_) {
                 if (search_root->expanded_) {
                     parent->n_children_fully_explored_++;
-                    if (parent->n_children_fully_explored_ == parent->children_.size()) {
+                    if ((parent->n_children_fully_explored_ == parent->children_.size()) ||
+                            (pos.turn_ == RED && search_root->val_ == 1.0) ||
+                            (pos.turn_ == BLUE && search_root->val_ == 0.0)) {
                         parent->fully_explored_ = true;
                     }
                 } else {
@@ -272,7 +261,8 @@ Move MCTNode::get_highest_value_move(Position& pos) {
         //char move_str[10];
         //children_[i]->move_.to_str(move_str);
         //fprintf(stderr, "%s: %lf\n", move_str, children_[i]->val_);
-        if (children_[i]->val_ * parity[pos.turn_] > best_val) {
+        if ((! fully_explored_ || children_[i]->fully_explored_) &&
+                children_[i]->val_ * parity[pos.turn_] > best_val) {
             best_move = children_[i]->move_;
             best_val = children_[i]->val_ * parity[pos.turn_];
             n_playouts = children_[i]->n_playouts_;

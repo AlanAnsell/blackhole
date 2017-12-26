@@ -212,35 +212,72 @@ Move Position::get_random_move() {
 }
 
 
+size_t lottery(size_t * tickets, size_t n_tickets) {
+    int winner = rand() % n_tickets;
+    size_t i;
+    for (i = 0; winner >= 0; i++)
+        winner -= tickets[i];
+    return i - 1;
+} 
+
 Move Position::get_default_policy_move() {
-    size_t controlled = n_controls_[turn_];
-    size_t controlled_chances =  controlled;
-    size_t uncontrolled = open_.len_ - controlled;
-    size_t uncontrolled_chances = 5 * uncontrolled;
-    size_t total = controlled_chances + uncontrolled_chances;
-    size_t outcome = rand() % total;
-    size_t count;
-    CellID cell_id;
-    if (outcome < controlled_chances) {
-        size_t con_n = rand() % controlled;
-        count = 0;
-        for (size_t i = 0; count <= con_n; i++)
-            if ((bool)(controls_ & (1LL << int64(open_.val_[i]))) == (bool)turn_)
-                count++;
-        cell_id = open_.val_[count - 1];
-    } else {
-        size_t uncon_n = rand() % uncontrolled;
-        count = 0;
-        for (size_t i = 0; count <= uncon_n; i++)
-            if ((bool)(controls_ & (1LL << int64(open_.val_[i]))) != (bool)turn_)
-                count++;
-        cell_id = open_.val_[count - 1];
+    size_t tickets[N_CELLS];
+    size_t total_tickets = 0;
+    size_t i;
+    size_t best_single = 400;
+    Value best_single_val = 1000;
+    for (i = 0; i < open_.len_; i++) {
+        tickets[i] = 0;
+        CellID id = open_.val_[i];
+        Cell& cell = cells_[id];
+        if (cell.adj_.len_ == 0) {
+            Value single_val = parity[turn_] * cell.value_;
+            if (single_val < best_single_val) {
+                best_single = i;
+                best_single_val = single_val;
+            }
+        } else {
+            if ((bool)(controls_ & (1LL << int64(id))) == (bool)turn_)
+                tickets[i] = 5;
+            else
+                tickets[i] = 25;
+            total_tickets += tickets[i];
+        }
     }
-    Cell& cell = cells_[cell_id];
-    if (cell.adj_.len_ == 0)
-        return Move(cell_id, parity[turn_] * stones_[turn_][0]);
-    return Move(cell_id,
-                parity[turn_] * stones_[turn_][rand() % n_stones_[turn_]]);
+    if (best_single != 400) {
+        tickets[best_single] = 1;
+        total_tickets++;
+    }
+    
+    size_t cell_index = lottery(tickets, total_tickets);
+    CellID pid = open_.val_[cell_index];
+    Cell& pcell = cells_[pid];
+
+    Value reqs[MAX_DEGREE];
+    size_t n_uncontrolled = 0;
+    Value req_val = parity[turn_] * (alpha_ - OFFSET[turn_]);
+    for (i = 0; i < pcell.adj_.len_; i++) {
+        Value adj_val = parity[turn_] * cells_[pcell.adj_.val_[i]].value_;
+        if (adj_val < req_val) {
+            reqs[n_uncontrolled] = req_val - adj_val;
+            n_uncontrolled++;
+        }
+    }
+    std::sort(reqs, reqs + n_uncontrolled);
+    
+    Value * stones = stones_[turn_];
+    size_t n_stones = n_stones_[turn_];
+    total_tickets = 0;
+    for (i = 0; i < n_stones; i++) {
+        size_t changes;
+        for (changes = 0; changes < n_uncontrolled && stones[i] <= reqs[changes]; changes++) {}
+        tickets[i] = 20 * (changes + 1) - stones[i];
+        total_tickets += tickets[i];
+    }
+
+    size_t stone_index = lottery(tickets, total_tickets);
+    Value stone_value = stones[stone_index] * parity[turn_];
+    return Move(pid, stone_value);
 }
 
 

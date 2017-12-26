@@ -63,3 +63,4 @@ int main(int argc, char** argv) {
 // EventHorizon1_1_2: moving target, scores -6.02  vs 0_0_0 (100 games)
 // EventHorizon1_1_3: don't play senseless moves in isolated cells, -4.74  vs 0_0_0 (100 games)
 // EventHorizon1_1_4: maximise expectation for first 5 moves, create default policy, -0.39  vs 0_0_0 (100 games)
+// EventHorizon1_1_5: disallow senseless moves with doubles, -0.00  vs 0_0_0 (100 games)

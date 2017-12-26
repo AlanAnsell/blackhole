@@ -109,29 +109,53 @@ void MCTNode::get_children(Position& pos) {
     size_t p = pos.turn_;
     Value * stones = pos.stones_[p];
     size_t n_stones = pos.n_stones_[p];
-    bool seen_dead = false;
     Value stone_value;
+    Value best_single_val = 1000;
+    CellID best_single = 400;
     for (size_t i = 0; i < pos.open_.len_; i++) {
         CellID id = pos.open_.val_[i];
         Cell& cell = pos.cells_[id];
+        Value cell_value = cell.value_ * parity[p];
         if (cell.adj_.len_ == 0) {
-            bool allow_move = true;
-            if (size_t(cell.value_ < alpha_) == p) {
-                if (seen_dead)
-                    allow_move = false;
-                else
-                    seen_dead = true;
+            if (cell_value < best_single_val) {
+                best_single = id;
+                best_single_val = cell_value;
             }
-            if (allow_move) {
-                stone_value = parity[p] * stones[0];
-                add_child(pos, Move(id, stone_value));
+        } else {
+            size_t j;
+            bool pair = false;
+            if (cell.adj_.len_ == 1) {
+                CellID adj_id = cell.adj_.val_[0];
+                Cell& adj = pos.cells_[adj_id];
+                if (adj.adj_.len_ == 1) {
+                    pair = true;
+                    Value adj_value = adj.value_ * parity[p];
+                    if (cell_value < adj_value || (cell_value == adj_value && id < adj_id)) {
+                        stone_value = parity[p] * stones[0];
+                        add_child(pos, Move(id, stone_value));
+                        Value control_req = parity[p] * (alpha_ - OFFSET[p]);
+                        if (adj_value + stones[0] < control_req) {
+                            Value extra = control_req - adj_value;
+                            for (j = 1; j < n_stones && stones[j] < extra; j++) {}
+                            if (j < n_stones) {
+                                stone_value = parity[p] * stones[j];
+                                add_child(pos, Move(id, stone_value));
+                            }
+                        }       
+                    }
+                }
             }
-        } else {            
-            for (size_t j = 0; j < n_stones; j++) {
-                stone_value = parity[p] * stones[j];
-                add_child(pos, Move(id, stone_value));
+            if (! pair) {
+                for (j = 0; j < n_stones; j++) {
+                    stone_value = parity[p] * stones[j];
+                    add_child(pos, Move(id, stone_value));
+                }
             }
         }
+    }
+    if (best_single != 400) {
+        stone_value = stones[0] * parity[p];
+        add_child(pos, Move(best_single, stone_value));
     }
 }
 

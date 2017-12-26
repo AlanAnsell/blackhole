@@ -85,26 +85,24 @@ void Position::make_move(const Move& move) {
     size_t& n_stones = n_stones_[turn_];
     n_stones--;
     size_t i = 0;
-    //printf("Deleting stone\n");
-    //fflush(stdout);
     while (stones[i] != stone_number)
         i++;
     for (; i < n_stones; i++)
         stones[i] = stones[i+1];
     turn_ ^= 1;
     
-    //printf("Deleting cell\n");
-    //fflush(stdout);
     open_.remove(move.cell_);
     
-    //printf("Filling cell\n");
-    //fflush(stdout);
     if (controls_ & (1LL << (int64)move.cell_))
         n_controls_[BLUE]--;
     else
         n_controls_[RED]--;
+    for (size_t p = 0; p < 2; p++)
+        if (dead_[p] & (1LL << (int64)move.cell_))
+            n_dead_[p]--;
     Cell& cell = cells_[move.cell_];
     cell.fill(move.stone_value_);
+    
     for (i = 0; i < cell.adj_.len_; i++) {
         CellID id = cell.adj_.val_[i];
         Cell& adj = cells_[id];
@@ -114,6 +112,23 @@ void Position::make_move(const Move& move) {
             n_controls_[old_control]--;
             n_controls_[new_control]++;
             controls_ ^= (1LL << (int64)id);
+        }
+    }
+    Value power[2][MAX_DEGREE+1];
+    get_stone_power(RED, power[0]);
+    get_stone_power(BLUE, power[1]);
+    for (i = 0; i < open_.len_; i++) {
+        CellID id = open_.val_[i];
+        int64 mask = (1LL << (int64)id);
+        if (! (dead_[RED] & mask) && ! (dead_[BLUE] & mask)) {
+            Cell& cell = cells_[id];
+            if (is_dead(cell, RED, power[BLUE])) {
+                n_dead_[RED]++;
+                dead_[RED] |= mask;
+            } else if (is_dead(cell, BLUE, power[RED])) {
+                n_dead_[BLUE]++;
+                dead_[BLUE] |= mask;
+            }
         }
     }
 }
@@ -139,6 +154,9 @@ void Position::unmake_move(const Move& move) {
         n_controls_[BLUE]++;
     else
         n_controls_[RED]++;
+    for (size_t p = 0; p < 2; p++)
+        if (dead_[p] & (1LL << (int64)move.cell_))
+            n_dead_[p]++;
     for (i = 0; i < cell.adj_.len_; i++) {
         CellID id = cell.adj_.val_[i];
         Cell& adj = cells_[id];
@@ -151,10 +169,29 @@ void Position::unmake_move(const Move& move) {
         }
     }
     
+    Value power[2][MAX_DEGREE+1];
+    get_stone_power(RED, power[0]);
+    get_stone_power(BLUE, power[1]);
+    for (i = 0; i < open_.len_; i++) {
+        CellID id = open_.val_[i];
+        Cell& cell = cells_[id];
+        int64 mask = (1LL << (int64)id);
+        if ((dead_[RED] & mask)) {
+            if (! is_dead(cell, RED, power[BLUE])) {
+                n_dead_[RED]--;
+                dead_[RED] ^= mask;
+            }
+        } else if ((dead_[BLUE] & mask)) {
+            if (! is_dead(cell, BLUE, power[RED])) {
+                n_dead_[BLUE]--;
+                dead_[BLUE] ^= mask;
+            }
+        }
+    }
 }
 
 
-void Position::get_stone_power(size_t p, Value alpha, Value * power) {
+void Position::get_stone_power(size_t p, Value * power) {
     size_t op = 1 - p;
     size_t n_stones = n_stones_[p];
     Value * stones = stones_[p];
@@ -173,7 +210,7 @@ size_t Position::dead_endgame_solve(Value alpha) {
     for (size_t p = 0; p < 2; p++) {
         size_t op = 1 - p;
         Value power[MAX_DEGREE+1];
-        get_stone_power(p, alpha, power);
+        get_stone_power(p, power);
         for (size_t i = 0; i < open_.len_; i++) {
             Cell& cell = cells_[open_.val_[i]];
             Value best_val = cell.value_ + power[cell.adj_.len_];
@@ -380,17 +417,48 @@ void Position::get_all_moves(std::vector<Move>& moves) {
 }
 
 
+bool Position::is_dead(Cell& cell, size_t p, Value * other_power) {
+    Value value = cell.value_;
+    size_t n_adj = cell.adj_.len_;
+    Value worst_val = parity[p] * (value + other_power[n_adj]);
+    return (worst_val >= parity[p] * (alpha_ - OFFSET[p]));
+}
+
+
+bool Position::is_winning(size_t p) const {
+    size_t op = 1 - p;
+    return n_dead_[p] > n_stones_[op];
+}
+
+
 void Position::set_alpha(Value alpha) {
     alpha_ = alpha;
     n_controls_[0] = n_controls_[1] = 0;
+    n_dead_[0] = n_dead_[1] = 0;
     controls_ = 0;
+    dead_[0] = dead_[1] = 0;
+    Value power[2][MAX_DEGREE+1];
+    get_stone_power(RED, power[0]);
+    get_stone_power(BLUE, power[1]);
     for (size_t i = 0; i < open_.len_; i++) {
         CellID id = open_.val_[i];
-        if (cells_[id].value_ >= alpha_) {
+        Cell& cell = cells_[id];
+        Value value = cell.value_;
+        size_t n_adj = cell.adj_.len_;
+        int64 mask = (1LL << (int64)id);
+        if (value >= alpha_) {
             n_controls_[RED]++;
+            if (value + power[BLUE][n_adj] >= alpha_) {
+                n_dead_[RED]++;
+                dead_[RED] |= mask;
+            }
         } else {
-            controls_ |= (1LL << (int64)id);
+            controls_ |= mask;
             n_controls_[BLUE]++;
+            if (value + power[RED][n_adj] < alpha_) {
+                n_dead_[BLUE]++;
+                dead_[BLUE] |= mask;
+            }
         }
     }
 }

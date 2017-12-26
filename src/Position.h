@@ -99,13 +99,17 @@ public:
     int64 controls_;
     size_t n_controls_[2];
 
+    int64 dead_[2];
+    size_t n_dead_[2];
+
+
 	Position(CellID blocked[N_BLOCKED_CELLS], Value alpha);
     
     void make_move(const Move& move);
     
 	void unmake_move(const Move& move);
 
-    void get_stone_power(size_t p, Value alpha, Value * power);
+    void get_stone_power(size_t p, Value * power);
 
     size_t dead_endgame_solve(Value alpha);
     
@@ -126,6 +130,10 @@ public:
     void get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves);
 
     void get_all_moves(std::vector<Move>& moves);
+
+    bool is_dead(Cell& cell, size_t p, Value * other_power);
+
+    bool is_winning(size_t p) const;
 
     void set_alpha(Value alpha);
 

@@ -6,7 +6,7 @@ const char * VERSION_NUMBER = "0.0.0";
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
 
-long long time_limit = 4500000;
+long long time_limit = 4900000;
 long long time_left = time_limit;
 long long time_started, time_ended;
 
@@ -20,7 +20,7 @@ void send_move(char * move_str) {
 	time_ended = get_time();
 	time_left -= (time_ended - time_started);
 	if (time_left < 0)
-		time_left = 0;
+		time_left = 50000;
 	fprintf(stderr, "%s\n", move_str);
 	printf("%s\n", move_str);
 	fflush(stdout);
@@ -96,7 +96,7 @@ void init() {
 }
 
 
-const Real UCB_C = 1.0;
+const Real UCB_C = 1.6;
 
 Real sigmoid(Real x) {
     return 1.0 / (1.0 + exp(-x));

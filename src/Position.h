@@ -94,8 +94,12 @@ public:
 	Value stones_[2][N_STONES];
 	size_t n_stones_[2];
 	size_t turn_;
-	
-	Position(CellID blocked[N_BLOCKED_CELLS]);
+
+    Value alpha_;
+    int64 controls_;
+    size_t n_controls_[2];
+
+	Position(CellID blocked[N_BLOCKED_CELLS], Value alpha);
     
     void make_move(const Move& move);
     
@@ -118,6 +122,8 @@ public:
     void get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves);
 
     void get_all_moves(std::vector<Move>& moves);
+
+    void set_alpha(Value alpha);
 
     void print(FILE * f);    
 };

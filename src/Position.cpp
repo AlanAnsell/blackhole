@@ -58,7 +58,7 @@ bool Move::operator < (const Move& other) const {
 }
 
 
-Position::Position(CellID blocked[N_BLOCKED_CELLS]): open_(N_CELLS, N_CELLS), turn_(RED) {
+Position::Position(CellID blocked[N_BLOCKED_CELLS], Value alpha): open_(N_CELLS, N_CELLS), turn_(RED) {
     size_t i;
     bool is_blocked[N_CELLS] = {false};
     for (i = 0; i < N_BLOCKED_CELLS; i++)
@@ -76,6 +76,7 @@ Position::Position(CellID blocked[N_BLOCKED_CELLS]): open_(N_CELLS, N_CELLS), tu
         for (i = 0; i < N_STONES; i++)
             stones_[p][i] = i + 1;
     }
+    //set_alpha(alpha);
 }
 
 void Position::make_move(const Move& move) {
@@ -98,7 +99,23 @@ void Position::make_move(const Move& move) {
     
     //printf("Filling cell\n");
     //fflush(stdout);
-    cells_[move.cell_].fill(move.stone_value_);
+    /*if (controls_ & (1LL << (int64)move.cell_))
+        n_controls_[BLUE]--;
+    else
+        n_controls_[RED]--;*/
+    Cell& cell = cells_[move.cell_];
+    cell.fill(move.stone_value_);
+    /*for (i = 0; i < cell.adj_.len_; i++) {
+        CellID id = cell.adj_.val_[i];
+        Cell& adj = cells_[id];
+        bool new_control = (adj.value_ < alpha_);
+        bool old_control = (controls_ & (1LL << (int64)id));
+        if (new_control != old_control) {
+            n_controls_[old_control]--;
+            n_controls_[new_control]++;
+            controls_ ^= (1LL << (int64)id);
+        }
+    }*/
 }
 
 
@@ -116,7 +133,24 @@ void Position::unmake_move(const Move& move) {
    
     open_.readd(move.cell_); 
     
-    cells_[move.cell_].unfill(move.stone_value_);
+    Cell& cell = cells_[move.cell_];
+    cell.unfill(move.stone_value_);
+    /*if (controls_ & (1LL << (int64)move.cell_))
+        n_controls_[BLUE]++;
+    else
+        n_controls_[RED]++;
+    for (i = 0; i < cell.adj_.len_; i++) {
+        CellID id = cell.adj_.val_[i];
+        Cell& adj = cells_[id];
+        bool new_control = (adj.value_ < alpha_);
+        bool old_control = (controls_ & (1LL << (int64)id));
+        if (new_control != old_control) {
+            n_controls_[old_control]--;
+            n_controls_[new_control]++;
+            controls_ ^= (1LL << (int64)id);
+        }
+    }*/
+    
 }
 
 
@@ -272,6 +306,22 @@ void Position::get_all_moves(std::vector<Move>& moves) {
             Value stone_value = parity[turn_] * stones[j];
             Move move(open_.val_[i], stone_value);
             moves.push_back(move);
+        }
+    }
+}
+
+
+void Position::set_alpha(Value alpha) {
+    alpha_ = alpha;
+    n_controls_[0] = n_controls_[1] = 0;
+    controls_ = 0;
+    for (size_t i = 0; i < open_.len_; i++) {
+        CellID id = open_.val_[i];
+        if (cells_[id].value_ >= alpha_) {
+            n_controls_[RED]++;
+        } else {
+            controls_ |= (1LL << (int64)id);
+            n_controls_[BLUE]++;
         }
     }
 }

@@ -15,7 +15,7 @@ int main(int argc, char** argv) {
         blocked[i] = cell_name_to_id(cell_str);
     }
     
-    Position pos(blocked);
+    Position pos(blocked, 0);
     char move_str[100];
     get_move(move_str);
 	//Value endgame_value;
@@ -58,3 +58,4 @@ int main(int argc, char** argv) {
 // EventHorizon1_0_2: remove move ordering, scores -2.82 vs 0_0_0 (100 games)
 // EventHorizon1_0_3: use bitmask move table, scores -2.55  vs 0_0_0 (100 games)
 // EventHorizon1_1_0: fixed target of 0, wins a lot of games by 1 point, loses horribly when it loses, scores -8.86  vs 0_0_0 (100 games)
+// EventHorizon1_1_2: moving target, scores -6.02  vs 0_0_0 (100 games)

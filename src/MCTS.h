@@ -74,6 +74,8 @@ public:
 
     ~MCTSearch();
 
+    MCTNode * select_alpha(const Position& pos);
+
     MCTNode * get_or_make_root(Value alpha, const Position& pos);
 
     Move get_best_move(Position& pos);

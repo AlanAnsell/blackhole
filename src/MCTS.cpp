@@ -376,12 +376,42 @@ MCTNode * MCTSearch::get_or_make_root(Value alpha, const Position& pos) {
     return roots_[index];
 }
 
+MCTNode * MCTSearch::select_alpha(const Position& pos) {
+    MCTNode * test_root;
+    MCTNode * root = NULL;
+    Value alpha;
+    if (pos.turn_ == RED) {
+        for (alpha = MIN_RESULT; alpha <= MAX_RESULT; alpha++) {
+            test_root = roots_[alpha + MAX_RESULT];
+            if (test_root != NULL) {
+                fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, test_root->n_playouts_, test_root->val_);
+                if (test_root->val_ >= 0.5 || root == NULL) {
+                    current_alpha_ = alpha;
+                    root = test_root;
+                }
+            }
+        }
+    } else {
+        for (alpha = MAX_RESULT; alpha >= MIN_RESULT; alpha--) {
+            test_root = roots_[alpha + MAX_RESULT];
+            if (test_root != NULL) {
+                fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, test_root->n_playouts_, test_root->val_);
+                if (test_root->val_ < 0.5 || root == NULL) {
+                    current_alpha_ = alpha;
+                    root = test_root;
+                }
+            }
+        }
+    }
+    return root;
+}
+
 
 Move MCTSearch::get_best_move(Position& pos) {
     long long start_micros = get_time();
     long long time_now = start_micros;
     long long alpha_time = 100000LL;
-    long long move_time = 300000LL;
+    long long move_time = 500000LL;
     size_t n_playouts = 0;
     size_t i;
     MCTNode * root;
@@ -390,24 +420,22 @@ Move MCTSearch::get_best_move(Position& pos) {
         return pos.get_expectation_maximising_move();
     
     while (time_now - start_micros < alpha_time) {
-        //fprintf(stderr, "Iterating\n");
-        //fflush(stderr);
         root = get_or_make_root(current_alpha_, pos);
         pos.set_alpha(current_alpha_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
-            //fprintf(stderr, "Anout to UCB\n");
-            //fflush(stderr);
             root->ucb(pos);
             n_playouts++;
         } 
-        //fprintf(stderr, "Finished UCBs\n");
-        //fflush(stderr);
         if (root->fully_explored_) {
-            if (root->val_ == 0.0 && current_alpha_ > MIN_RESULT)
+            if (root->val_ == 0.0 && current_alpha_ > MIN_RESULT) {
                 current_alpha_--;
-            else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT)
+                if (get_or_make_root(current_alpha_, pos)->fully_explored_)
+                    break;
+            } else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT) {
                 current_alpha_++;
-            else {
+                if (get_or_make_root(current_alpha_, pos)->fully_explored_)
+                    break;
+            } else {
                 fprintf(stderr, "MIN/MAX RESULT achieved\n");
                 break;
             }
@@ -423,52 +451,55 @@ Move MCTSearch::get_best_move(Position& pos) {
         time_now = get_time();
     }
 
-    MCTNode * search_root = NULL;
-    Value alpha;
-    if (pos.turn_ == RED) {
-        for (alpha = MIN_RESULT; alpha <= MAX_RESULT; alpha++) {
-            root = roots_[alpha + MAX_RESULT];
-            if (root != NULL) {
-                fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, root->n_playouts_, root->val_);
-                if (root->val_ >= 0.5 || search_root == NULL) {
-                    current_alpha_ = alpha;
-                    search_root = root;
-                }
-            }
-        }
-    } else {
-        for (alpha = MAX_RESULT; alpha >= MIN_RESULT; alpha--) {
-            root = roots_[alpha + MAX_RESULT];
-            if (root != NULL) {
-                fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, root->n_playouts_, root->val_);
-                if (root->val_ < 0.5 || search_root == NULL) {
-                    current_alpha_ = alpha;
-                    search_root = root;
-                }
-            }
-        }
-    }
-
+    root = select_alpha(pos);
+    
+    Value original_alpha = current_alpha_;
     fprintf(stderr, "Alpha = %d\n", current_alpha_);
     pos.set_alpha(current_alpha_);
+    bool solved = false;
     while (time_now - start_micros < move_time) {
-        for (i = 0; i < 100 && ! search_root->fully_explored_; i++) {
-            //fprintf(stderr, "Anout to UCB\n");
-            //fflush(stderr);
-            search_root->ucb(pos);
+        for (i = 0; i < 100 && ! root->fully_explored_; i++) {
+            root->ucb(pos);
             n_playouts++;
         } 
+        if (root->fully_explored_) {
+            if (root->val_ == 0.0 && current_alpha_ > MIN_RESULT) {
+                current_alpha_--;
+                root = get_or_make_root(current_alpha_, pos);
+                pos.set_alpha(current_alpha_);
+                if (root->fully_explored_) {
+                    solved = true;
+                    break;
+                }
+            } else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT) {
+                current_alpha_++;
+                root = get_or_make_root(current_alpha_, pos);
+                pos.set_alpha(current_alpha_);
+                if (root->fully_explored_) {
+                    solved = true;
+                    break;
+                }
+            } else {
+                fprintf(stderr, "MIN/MAX RESULT achieved\n");
+                break;
+            }
+        }
         time_now = get_time();
     }
 
+    current_alpha_ = original_alpha;
+    if (solved)
+        root = select_alpha(pos);
+    pos.set_alpha(current_alpha_);
+
     fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts, (double)(time_now - start_micros) / 1e6);
 
-    if (search_root->fully_explored_) {
+    if (root->fully_explored_) {
         fprintf(stderr, "Search tree fully explored\n");
-        return search_root->get_highest_value_move(pos);
+        return root->get_highest_value_move(pos);
     }
 
-    return search_root->get_most_played_move();
+    return root->get_most_played_move();
 }
 
 

@@ -34,6 +34,8 @@ public:
 
     //void fill_move_table(Position& pos);
 
+    void add_child(Position& pos, const Move& move);
+
     void get_children(Position& pos);
 
     MCTNode * expand(Position& pos);

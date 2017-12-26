@@ -76,7 +76,7 @@ Position::Position(CellID blocked[N_BLOCKED_CELLS], Value alpha): open_(N_CELLS,
         for (i = 0; i < N_STONES; i++)
             stones_[p][i] = i + 1;
     }
-    //set_alpha(alpha);
+    set_alpha(alpha);
 }
 
 void Position::make_move(const Move& move) {
@@ -99,13 +99,13 @@ void Position::make_move(const Move& move) {
     
     //printf("Filling cell\n");
     //fflush(stdout);
-    /*if (controls_ & (1LL << (int64)move.cell_))
+    if (controls_ & (1LL << (int64)move.cell_))
         n_controls_[BLUE]--;
     else
-        n_controls_[RED]--;*/
+        n_controls_[RED]--;
     Cell& cell = cells_[move.cell_];
     cell.fill(move.stone_value_);
-    /*for (i = 0; i < cell.adj_.len_; i++) {
+    for (i = 0; i < cell.adj_.len_; i++) {
         CellID id = cell.adj_.val_[i];
         Cell& adj = cells_[id];
         bool new_control = (adj.value_ < alpha_);
@@ -115,7 +115,7 @@ void Position::make_move(const Move& move) {
             n_controls_[new_control]++;
             controls_ ^= (1LL << (int64)id);
         }
-    }*/
+    }
 }
 
 
@@ -135,7 +135,7 @@ void Position::unmake_move(const Move& move) {
     
     Cell& cell = cells_[move.cell_];
     cell.unfill(move.stone_value_);
-    /*if (controls_ & (1LL << (int64)move.cell_))
+    if (controls_ & (1LL << (int64)move.cell_))
         n_controls_[BLUE]++;
     else
         n_controls_[RED]++;
@@ -149,7 +149,7 @@ void Position::unmake_move(const Move& move) {
             n_controls_[new_control]++;
             controls_ ^= (1LL << (int64)id);
         }
-    }*/
+    }
     
 }
 
@@ -212,8 +212,40 @@ Move Position::get_random_move() {
 }
 
 
-Move Position::get_expectation_maximising_move_with_endgame_solve() {
-    Move best_move(0, 0);
+Move Position::get_default_policy_move() {
+    size_t controlled = n_controls_[turn_];
+    size_t controlled_chances =  controlled;
+    size_t uncontrolled = open_.len_ - controlled;
+    size_t uncontrolled_chances = 5 * uncontrolled;
+    size_t total = controlled_chances + uncontrolled_chances;
+    size_t outcome = rand() % total;
+    size_t count;
+    CellID cell_id;
+    if (outcome < controlled_chances) {
+        size_t con_n = rand() % controlled;
+        count = 0;
+        for (size_t i = 0; count <= con_n; i++)
+            if ((bool)(controls_ & (1LL << int64(open_.val_[i]))) == (bool)turn_)
+                count++;
+        cell_id = open_.val_[count - 1];
+    } else {
+        size_t uncon_n = rand() % uncontrolled;
+        count = 0;
+        for (size_t i = 0; count <= uncon_n; i++)
+            if ((bool)(controls_ & (1LL << int64(open_.val_[i]))) != (bool)turn_)
+                count++;
+        cell_id = open_.val_[count - 1];
+    }
+    Cell& cell = cells_[cell_id];
+    if (cell.adj_.len_ == 0)
+        return Move(cell_id, parity[turn_] * stones_[turn_][0]);
+    return Move(cell_id,
+                parity[turn_] * stones_[turn_][rand() % n_stones_[turn_]]);
+}
+
+
+Move Position::get_expectation_maximising_move() {
+    Move best_move;
     Real best_expectation = -1000.0;
     Value * stones = stones_[turn_];
     size_t n_stones = n_stones_[turn_];
@@ -222,12 +254,7 @@ Move Position::get_expectation_maximising_move_with_endgame_solve() {
             Value stone_value = parity[turn_] * stones[j];
             Move move(open_.val_[i], stone_value);
             make_move(move);
-            Real expectation;
-            Value endgame_result = dead_endgame_value();
-            if (endgame_result == NO_RESULT)
-                expectation = calculate_expectation();
-            else
-                expectation = (Real)endgame_result;
+            Real  expectation = calculate_expectation();
             unmake_move(move);
             expectation *= parity[turn_];
             if (expectation > best_expectation) {
@@ -280,7 +307,12 @@ Real Position::calculate_expectation() const {
     }
     return sum / open_.len_;
 }
-   
+
+
+Real Position::get_control_heuristic() const {
+    return (Real)n_controls_[RED] / (Real)open_.len_;
+}
+
 
 void Position::get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves) {
     Value * stones = stones_[turn_];

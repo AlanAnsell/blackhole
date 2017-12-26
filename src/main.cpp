@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
         pos.make_move(Move(move_str, pos.turn_));
 	Value alpha = 0;
     while (true) {
-		fprintf(stderr, "Time left: %.2f seconds\n", (float)time_left / 1e6);
+        fprintf(stderr, "Time left: %.2f seconds\n", (float)time_left / 1e6);
 		//endgame_value = pos.dead_endgame_value();
         //if (endgame_value != NO_RESULT)
         //    fprintf(stderr, "Solved endgame: %d\n", endgame_value);
@@ -32,6 +32,8 @@ int main(int argc, char** argv) {
 #endif
         //fprintf(stderr, "Creating MCTS tree\n");
         //fflush(stderr);
+        pos.set_alpha(0);
+        fprintf(stderr, "Control heuristic: %.3f\n", pos.get_control_heuristic());
         MCTSearch search(pos, alpha);
         //fprintf(stderr, "Performing MCTS search\n");
         //fflush(stderr);
@@ -59,3 +61,5 @@ int main(int argc, char** argv) {
 // EventHorizon1_0_3: use bitmask move table, scores -2.55  vs 0_0_0 (100 games)
 // EventHorizon1_1_0: fixed target of 0, wins a lot of games by 1 point, loses horribly when it loses, scores -8.86  vs 0_0_0 (100 games)
 // EventHorizon1_1_2: moving target, scores -6.02  vs 0_0_0 (100 games)
+// EventHorizon1_1_3: don't play senseless moves in isolated cells, -4.74  vs 0_0_0 (100 games)
+// EventHorizon1_1_4: maximise expectation for first 5 moves, create default policy, -0.39  vs 0_0_0 (100 games)

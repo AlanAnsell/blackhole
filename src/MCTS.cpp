@@ -17,7 +17,7 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
     if (fully_explored_)
         val_ = (pos.cells_[pos.open_.val_[0]].value_ >= alpha_) ? 1.0 : 0.0;
     else
-        val_ = 0.5;
+        val_ = pos.get_control_heuristic(); 
     n_red_wins_ = 0;
     n_playouts_ = 0;
     children_.clear();
@@ -96,19 +96,41 @@ MCTNode * MCTNode::select(Position& pos) {
 // }
 
 
+void MCTNode::add_child(Position& pos, const Move& move) {
+    pos.make_move(move);
+    MCTNode * child = get_free();
+    child->init(this, pos, move, alpha_);
+    children_.push_back(child);
+    pos.unmake_move(move);
+}
+
+
 void MCTNode::get_children(Position& pos) {
     size_t p = pos.turn_;
     Value * stones = pos.stones_[p];
     size_t n_stones = pos.n_stones_[p];
+    bool seen_dead = false;
+    Value stone_value;
     for (size_t i = 0; i < pos.open_.len_; i++) {
-        for (size_t j = 0; j < n_stones; j++) {
-            Value stone_value = parity[p] * stones[j];
-            Move move(pos.open_.val_[i], stone_value);
-            pos.make_move(move);
-            MCTNode * child = get_free();
-            child->init(this, pos, move, alpha_);
-            children_.push_back(child);
-            pos.unmake_move(move);
+        CellID id = pos.open_.val_[i];
+        Cell& cell = pos.cells_[id];
+        if (cell.adj_.len_ == 0) {
+            bool allow_move = true;
+            if (size_t(cell.value_ < alpha_) == p) {
+                if (seen_dead)
+                    allow_move = false;
+                else
+                    seen_dead = true;
+            }
+            if (allow_move) {
+                stone_value = parity[p] * stones[0];
+                add_child(pos, Move(id, stone_value));
+            }
+        } else {            
+            for (size_t j = 0; j < n_stones; j++) {
+                stone_value = parity[p] * stones[j];
+                add_child(pos, Move(id, stone_value));
+            }
         }
     }
 }
@@ -116,8 +138,7 @@ void MCTNode::get_children(Position& pos) {
 
 MCTNode * MCTNode::expand(Position& pos) {
     get_children(pos);
-    std::random_shuffle(children_.begin(), children_.end());
-    /*MCTNode * best_child = NULL;
+    MCTNode * best_child = NULL;
     Real best_val = -1.0;
     for (size_t i = 0; i < children_.size(); i++) {
         Real child_val = children_[i]->val_;
@@ -127,10 +148,10 @@ MCTNode * MCTNode::expand(Position& pos) {
             best_child = children_[i];
             best_val = child_val;
         }
-    }*/
+    }
     expanded_ = true;
     
-    return children_.back();
+    return best_child ;
 }
 
 
@@ -140,7 +161,7 @@ bool MCTNode::light_playout(Position& pos) {
     int move_count;
     //char move_str[10];
     for (move_count = 0; pos.open_.len_ > 1; move_count++) {
-        playout_moves[move_count] = pos.get_random_move();
+        playout_moves[move_count] = pos.get_default_policy_move();
         //playout_moves[move_count].to_str(move_str);
         //fprintf(stderr, "Making move %s\n", move_str);
         //fflush(stderr);
@@ -340,10 +361,15 @@ Move MCTSearch::get_best_move(Position& pos) {
     size_t n_playouts = 0;
     size_t i;
     MCTNode * root;
+    
+    if (pos.open_.len_ > 20)
+        return pos.get_expectation_maximising_move();
+    
     while (time_now - start_micros < alpha_time) {
         //fprintf(stderr, "Iterating\n");
         //fflush(stderr);
         root = get_or_make_root(current_alpha_, pos);
+        pos.set_alpha(current_alpha_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             //fprintf(stderr, "Anout to UCB\n");
             //fflush(stderr);
@@ -400,7 +426,7 @@ Move MCTSearch::get_best_move(Position& pos) {
     }
 
     fprintf(stderr, "Alpha = %d\n", current_alpha_);
-
+    pos.set_alpha(current_alpha_);
     while (time_now - start_micros < move_time) {
         for (i = 0; i < 100 && ! search_root->fully_explored_; i++) {
             //fprintf(stderr, "Anout to UCB\n");

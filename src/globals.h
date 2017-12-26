@@ -63,4 +63,6 @@ void init();
 #define N_MCT_NODES 1000000
 
 extern const Real UCB_C;
+
+Real sigmoid(Real x);
 #endif

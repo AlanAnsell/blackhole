@@ -113,11 +113,15 @@ public:
     
     Move get_random_move();
 
-    Move get_expectation_maximising_move_with_endgame_solve();
+    Move get_default_policy_move();
+
+    Move get_expectation_maximising_move();
 
 	Real search_expectation();
 
 	Real calculate_expectation() const;		
+
+    Real get_control_heuristic() const;
 
     void get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves);
 

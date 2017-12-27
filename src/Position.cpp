@@ -94,9 +94,13 @@ void Position::make_move(const Move& move) {
         n_controls_[BLUE]--;
     else
         n_controls_[RED]--;
-    for (size_t p = 0; p < 2; p++)
-        if (dead_[p] & cell_mask)
+    for (size_t p = 0; p < 2; p++) {
+        if (dead_[p] & cell_mask) {
             n_dead_[p]--;
+            if (stale_[p] & cell_mask)
+                n_stale_[p]--;
+        }
+    }
     fill(cell_id, move.stone_value_);
     
     List& adj = adj_[cell_id];
@@ -128,6 +132,22 @@ void Position::make_move(const Move& move) {
         }
     }
     find_stale_cells();
+#ifdef DEBUG_
+    assert((dead_[RED] & dead_[BLUE]) == 0LL);
+    assert((stale_[RED] & stale_[BLUE]) == 0LL);
+    if (n_stale_[RED] > n_dead_[RED]) {
+        print(stderr);
+        fprintf(stderr, "Red: %u stale, %u dead\n", n_stale_[RED], n_dead_[RED]);
+        fflush(stderr);
+    }
+    if (n_stale_[BLUE] > n_dead_[BLUE]) {
+        print(stderr);
+        fprintf(stderr, "Red: %u stale, %u dead\n", n_stale_[BLUE], n_dead_[BLUE]);
+        fflush(stderr);
+    }
+    assert(n_stale_[RED] <= n_dead_[RED]);
+    assert(n_stale_[BLUE] <= n_dead_[BLUE]);
+#endif
 }
 
 
@@ -153,9 +173,13 @@ void Position::unmake_move(const Move& move) {
         n_controls_[BLUE]++;
     else
         n_controls_[RED]++;
-    for (size_t p = 0; p < 2; p++)
-        if (dead_[p] & cell_mask)
+    for (size_t p = 0; p < 2; p++) {
+        if (dead_[p] & cell_mask) {
             n_dead_[p]++;
+            if (stale_[p] & cell_mask)
+                n_stale_[p]++;
+        }
+    }
     List& adj = adj_[cell_id];
     for (i = 0; i < adj.len_; i++) {
         size_t adj_id = adj.val_[i];
@@ -190,11 +214,24 @@ void Position::unmake_move(const Move& move) {
     for (i = 0; i < open_.len_; i++) {
         size_t id = open_.val_[i];
         int64 mask = (1LL << (int64)id);
-        if (stale_ & mask) {
-            if ((! (dead_[RED] & mask) && ! (dead_[BLUE] & mask)) || ! all_adj_dead(id))
-                stale_ ^= mask;
+        if ((stale_[RED] & mask) || (stale_[BLUE] & mask)) {
+            if ((! (dead_[RED] & mask) && ! (dead_[BLUE] & mask)) || ! all_adj_dead(id)) {
+                if (stale_[RED] & mask) {
+                    stale_[RED] ^= mask;
+                    n_stale_[RED]--;
+                } else {
+                    stale_[BLUE] ^= mask;
+                    n_stale_[BLUE]--;
+                }
+            }
         }
     }
+#ifdef DEBUG_
+    assert((dead_[RED] & dead_[BLUE]) == 0LL);
+    assert((stale_[RED] & stale_[BLUE]) == 0LL);
+    assert(n_stale_[RED] <= n_dead_[RED]);
+    assert(n_stale_[BLUE] <= n_dead_[BLUE]);
+#endif
 }
 
 
@@ -237,18 +274,21 @@ Move Position::get_default_policy_move() {
     for (i = 0; i < open_.len_; i++) {
         tickets[i] = 0;
         cell_id = open_.val_[i];
-        if (stale_ & (1LL << (int64)cell_id)) {
+        int64 mask = (1LL << (int64)cell_id);
+        if ((stale_[RED] & mask) || (stale_[BLUE] & mask)) {
             Value stale_val = m_ * value_[cell_id];
             if (stale_val < best_stale_val) {
                 best_stale = i;
                 best_stale_val = stale_val;
             }
         } else {
-            if ((bool)(controls_ & (1LL << int64(cell_id))) == (bool)turn_)
-                tickets[i] = 1;
-            else
-                tickets[i] = 3;
-            total_tickets += tickets[i];
+            if ((dead_[1-turn_] & mask) || (n_stones_[turn_] > n_dead_[1-turn_])) {
+                if ((bool)(controls_ & (1LL << int64(cell_id))) == (bool)turn_)
+                    tickets[i] = 1;
+                else
+                    tickets[i] = 3;
+                total_tickets += tickets[i];
+            }
         }
     }
     if (best_stale != NO_CELL) {
@@ -274,15 +314,29 @@ Move Position::get_default_policy_move() {
     
     Value * stones = stones_[turn_];
     size_t n_stones = n_stones_[turn_];
-    total_tickets = 0;
-    for (i = 0; i < n_stones; i++) {
-        size_t changes;
-        for (changes = 0; changes < n_uncontrolled && stones[i] <= reqs[changes]; changes++) {}
-        tickets[i] = 20 * (changes + 1) - stones[i];
-        total_tickets += tickets[i];
+    size_t stone_index;
+    if (cell_index == best_stale)
+        stone_index = 0;
+    else {
+        total_tickets = 0;
+        for (i = n_stale_[1 - turn_]; i < n_stones; i++) {
+            size_t changes;
+            for (changes = 0; changes < n_uncontrolled && stones[i] <= reqs[changes]; changes++) {}
+            tickets[i] = 20 * (changes + 1) - stones[i];
+            total_tickets += tickets[i];
+        }
+#ifdef DEBUG_
+        if (total_tickets == 0) {
+            print(stderr);
+            fprintf(stderr, "Red: %u stale, %u dead\n", n_stale_[RED], n_dead_[RED]);
+            fprintf(stderr, "Blue: %u stale, %u dead\n", n_stale_[BLUE], n_dead_[BLUE]);
+            fflush(stderr);
+        }
+        assert(total_tickets > 0);
+#endif
+        stone_index = lottery(tickets, total_tickets);
     }
-
-    size_t stone_index = lottery(tickets, total_tickets);
+    
     Value stone_value = m_ * stones[stone_index];
     return Move(cell_id, stone_value);
 }
@@ -386,10 +440,17 @@ void Position::find_stale_cells() {
     for (size_t i = 0; i < open_.len_; i++) {
         size_t cell_id = open_.val_[i];
         int64 mask = (1LL << (int64)cell_id);
-        if (! (stale_ & mask) &&
+        if (! (stale_[RED] & mask) && ! (stale_[BLUE] & mask) &&
                 ((dead_[RED] & mask) || (dead_[BLUE] & mask))) {
-            if (all_adj_dead(cell_id))
-                stale_ |= mask;
+            if (all_adj_dead(cell_id)) {
+                if (dead_[RED] & mask) {
+                    stale_[RED] |= mask;
+                    n_stale_[RED]++;
+                } else {
+                    stale_[BLUE] |= mask;
+                    n_stale_[BLUE]++;
+                }
+            }
         }
     }
 }
@@ -407,7 +468,8 @@ void Position::set_alpha(Value alpha) {
     controls_ = 0;
     Value power[2][MAX_DEGREE+1];
     dead_[0] = dead_[1] = 0;
-    stale_ = 0;
+    stale_[RED] = stale_[BLUE] = 0;
+    n_stale_[RED] = n_stale_[BLUE] = 0;
     get_stone_power(RED, power[0]);
     get_stone_power(BLUE, power[1]);
     size_t i, cell_id, n_adj;
@@ -433,6 +495,12 @@ void Position::set_alpha(Value alpha) {
         }
     }
     find_stale_cells();
+#ifdef DEBUG_
+    assert((dead_[RED] & dead_[BLUE]) == 0LL);
+    assert((stale_[RED] & stale_[BLUE]) == 0LL);
+    assert(n_stale_[RED] <= n_dead_[RED]);
+    assert(n_stale_[BLUE] <= n_dead_[BLUE]);
+#endif
 }
 
 
@@ -463,6 +531,8 @@ void Position::take_snapshot() {
         snapshot_.n_controls_[p] = n_controls_[p];
         snapshot_.dead_[p] = dead_[p];
         snapshot_.n_dead_[p] = n_dead_[p];
+        snapshot_.stale_[p] = stale_[p];
+        snapshot_.n_stale_[p] = n_stale_[p];
     }
 
 }
@@ -500,6 +570,8 @@ void Position::restore_snapshot() {
         n_controls_[p] = snapshot_.n_controls_[p];
         dead_[p] = snapshot_.dead_[p];
         n_dead_[p] = snapshot_.n_dead_[p];
+        stale_[p] = snapshot_.stale_[p];
+        n_stale_[p] = snapshot_.n_stale_[p];
     }
 }
 

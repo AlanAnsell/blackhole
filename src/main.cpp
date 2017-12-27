@@ -54,3 +54,4 @@ int main(int argc, char** argv) {
 // EventHorizon1_1_6: default policy with lottery, fix propagation for fully explored positions, +0.86 vs 0_0_0, +0.46 vs player3
 // EventHorizon1_1_7: add dead tiles to Position +0.62 vs player3
 // EventHorizon1_2_0: remove Cell class, add stale cell tracking
+// EventHorizon1_2_1: don't generate moves with stones which can be placed in stale cells, +0.95 vs player3

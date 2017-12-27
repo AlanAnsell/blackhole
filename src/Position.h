@@ -86,6 +86,7 @@ struct Snapshot {
     size_t n_dead_[2];
 
     int64 stale_[2];
+    size_t n_stale_[2];
 };
 
 
@@ -107,7 +108,8 @@ public:
     int64 dead_[2];
     size_t n_dead_[2];
 
-    int64 stale_;
+    int64 stale_[2];
+    size_t n_stale_[2];
 
     Snapshot snapshot_;
 

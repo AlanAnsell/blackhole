@@ -81,38 +81,41 @@ void MCTNode::get_children(Position& pos) {
     for (size_t i = 0; i < pos.open_.len_; i++) {
         size_t cell_id = pos.open_.val_[i];
         Value cell_value = pos.value_[cell_id] * parity[p];
-        if (pos.stale_ & (1LL << (int64)cell_id)) {
+        int64 mask = (1LL << (int64)cell_id);
+        if ((pos.stale_[RED] & mask) || (pos.stale_[BLUE] & mask)) {
             if (cell_value < best_stale_val) {
                 best_stale = cell_id;
                 best_stale_val = cell_value;
             }
         } else {
-            size_t j;
-            bool pair = false;
-            if (pos.adj_[cell_id].len_ == 1) {
-                size_t adj_id = pos.adj_[cell_id].val_[0];
-                if (pos.adj_[adj_id].len_ == 1) {
-                    pair = true;
-                    Value adj_value = pos.value_[adj_id] * parity[p];
-                    if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
-                        stone_value = parity[p] * stones[0];
-                        add_child(pos, Move(cell_id, stone_value));
-                        Value control_req = parity[p] * (alpha_ - OFFSET[p]);
-                        if (adj_value + stones[0] < control_req) {
-                            Value extra = control_req - adj_value;
-                            for (j = 1; j < n_stones && stones[j] < extra; j++) {}
-                            if (j < n_stones) {
-                                stone_value = parity[p] * stones[j];
-                                add_child(pos, Move(cell_id, stone_value));
-                            }
-                        }       
+            if ((pos.dead_[1-p] & mask) || (n_stones > pos.n_dead_[1-p])) {
+                size_t j;
+                bool pair = false;
+                if (pos.adj_[cell_id].len_ == 1) {
+                    size_t adj_id = pos.adj_[cell_id].val_[0];
+                    if (pos.adj_[adj_id].len_ == 1) {
+                        pair = true;
+                        Value adj_value = pos.value_[adj_id] * parity[p];
+                        if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
+                            stone_value = parity[p] * stones[0];
+                            add_child(pos, Move(cell_id, stone_value));
+                            Value control_req = parity[p] * (alpha_ - OFFSET[p]);
+                            if (adj_value + stones[0] < control_req) {
+                                Value extra = control_req - adj_value;
+                                for (j = 1; j < n_stones && stones[j] < extra; j++) {}
+                                if (j < n_stones) {
+                                    stone_value = parity[p] * stones[j];
+                                    add_child(pos, Move(cell_id, stone_value));
+                                }
+                            }       
+                        }
                     }
                 }
-            }
-            if (! pair) {
-                for (j = 0; j < n_stones; j++) {
-                    stone_value = parity[p] * stones[j];
-                    add_child(pos, Move(cell_id, stone_value));
+                if (! pair) {
+                    for (j = pos.n_stale_[1 - p]; j < n_stones; j++) {
+                        stone_value = parity[p] * stones[j];
+                        add_child(pos, Move(cell_id, stone_value));
+                    }
                 }
             }
         }
@@ -168,13 +171,13 @@ MCTNode * MCTNode::expand(Position& pos) {
 }
 
 
-Move playout_moves[N_CELLS];
+//Move playout_moves[N_CELLS];
 
 bool MCTNode::light_playout(Position& pos) {
     int move_count;
     bool result = true;
     bool result_found = false;
-    //pos.take_snapshot();
+    pos.take_snapshot();
     for (move_count = 0; pos.open_.len_ > 1; move_count++) {
         if (pos.is_winning(RED)) {
             result = true;
@@ -187,15 +190,15 @@ bool MCTNode::light_playout(Position& pos) {
             break;
         } 
         //playout_moves[move_count] = pos.get_random_move();
-        playout_moves[move_count] = pos.get_default_policy_move();
-        pos.make_move(playout_moves[move_count]);
-        //pos.make_move(pos.get_default_policy_move());
+        //playout_moves[move_count] = pos.get_default_policy_move();
+        //pos.make_move(playout_moves[move_count]);
+        pos.make_move(pos.get_default_policy_move());
     }
     if (! result_found)
         result = (pos.value_[pos.open_.val_[0]] >= alpha_);
-    for (move_count--; move_count >= 0; move_count--)
-        pos.unmake_move(playout_moves[move_count]);
-    //pos.restore_snapshot();
+    //for (move_count--; move_count >= 0; move_count--)
+    //    pos.unmake_move(playout_moves[move_count]);
+    pos.restore_snapshot();
     return result;
 }
 

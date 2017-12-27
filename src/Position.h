@@ -10,7 +10,10 @@ public:
     size_t * loc_;
     size_t len_;
 
-    List(size_t max_len, size_t range): len_(0) {
+    List(): val_(NULL), loc_(NULL), len_(0) {}
+
+    void init(size_t max_len, size_t range) {
+        len_ = 0;
         val_ = new size_t[max_len];
         loc_ = new size_t[range];
     }
@@ -47,27 +50,6 @@ public:
 
 };
 
-class Cell {
-public:
-	CellID id_;
-	Cell * board_;
-	List adj_;
-    Value value_;
-
-    Cell(): adj_(MAX_DEGREE, N_CELLS) {}
-
-    void init(CellID id, Cell * cells);
-
-	void remove_neighbour(CellID neighbour_id, Value stone_value);
-
-	void add_neighbour(CellID neighbour_id, Value stone_value);
-
-	void fill(Value stone_value);
-	
-	void unfill(Value stone_value);
-	
-};
-
 
 class Move {
 public:
@@ -86,14 +68,37 @@ public:
 };
 
 
+struct Snapshot {
+    size_t n_open_;
+    size_t open_[N_CELLS];
+    size_t adj_[N_CELLS][MAX_DEGREE];
+    size_t n_adj_[N_CELLS];
+    Value value_[N_CELLS];
+
+    Value stones_[2][N_STONES];
+    size_t n_stones_[2];
+    size_t turn_;
+
+    int64 controls_;
+    size_t n_controls_[2];
+
+    int64 dead_[2];
+    size_t n_dead_[2];
+
+    int64 stale_[2];
+};
+
+
 class Position {
 public:
-	Cell cells_[N_CELLS];
     List open_;
+    List adj_[N_CELLS];
+    Value value_[N_CELLS];
 
 	Value stones_[2][N_STONES];
 	size_t n_stones_[2];
 	size_t turn_;
+    int m_;
 
     Value alpha_;
     int64 controls_;
@@ -102,26 +107,28 @@ public:
     int64 dead_[2];
     size_t n_dead_[2];
 
+    int64 stale_;
+
+    Snapshot snapshot_;
+
 
 	Position(CellID blocked[N_BLOCKED_CELLS], Value alpha);
-    
+   
+    void fill(size_t cell_id, Value stone_value);
+
+    void unfill(size_t cell_id, Value stone_value);
+
     void make_move(const Move& move);
     
 	void unmake_move(const Move& move);
 
     void get_stone_power(size_t p, Value * power);
 
-    size_t dead_endgame_solve(Value alpha);
-    
-    Value dead_endgame_value();
-    
     Move get_random_move();
 
     Move get_default_policy_move();
 
     Move get_expectation_maximising_move();
-
-	Real search_expectation();
 
 	Real calculate_expectation() const;		
 
@@ -131,11 +138,19 @@ public:
 
     void get_all_moves(std::vector<Move>& moves);
 
-    bool is_dead(Cell& cell, size_t p, Value * other_power);
+    bool is_dead(size_t cell_id, size_t p, Value * other_power);
+
+    bool all_adj_dead(size_t cell_id);
+
+    void find_stale_cells();
 
     bool is_winning(size_t p) const;
 
     void set_alpha(Value alpha);
+
+    void take_snapshot();
+
+    void restore_snapshot();
 
     void print(FILE * f);    
 };

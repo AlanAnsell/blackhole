@@ -26,7 +26,6 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
     n_red_wins_ = 0;
     n_playouts_ = 0;
     children_.clear();
-    //untried_moves_ = pos.open_.len_ * pos.n_stones_[pos.turn_];
     expanded_ = false;
     n_children_fully_explored_ = 0;
 }
@@ -35,11 +34,15 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
 MCTNode * MCTNode::select(Position& pos) {
     MCTNode * best_node = NULL;
     Real best_value = -1000.0;
+#ifdef DEBUG_
     bool fe = false;
+#endif
     for (size_t i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (! child->fully_explored_) {
+#ifdef DEBUG_
             fe = true;
+#endif
             Real child_val = child->val_;
             if (pos.turn_ == BLUE)
                 child_val = 1.0 - child_val;
@@ -59,48 +62,6 @@ MCTNode * MCTNode::select(Position& pos) {
 }
 
 
-// void MCTNode::fill_move_table(Position& pos) {
-//     size_t p = pos.turn_;
-//     size_t n_stones = pos.n_stones_[p];
-//     Value * stones = pos.stones_[p];
-//     //Value power[MAX_DEGREE+1];
-// 
-//     Bitmask mask = 0;
-//     size_t i;
-//     for (i = 0; i < n_stones; i++)
-//         mask |= (1 << (stones[i] - 1));
-// 
-//     //pos.get_stone_power(1 - p, alpha_, power);
-//     
-//     //bool seen_dead = false;
-//     n_untried_moves_ = 0;    
-//     for (i = 0; i < pos.open_.len_; i++) {
-//         CellID cell_id = pos.open_.val_[i];
-//         Cell& cell = pos.cells_[cell_id];
-//         /*Value worst_val = cell.value_ + power[cell.adj_.len_];
-//         if (worst_val * parity[p] >= (alpha_ - OFFSET[p]) * parity[p]) {
-//             if (seen_dead) {
-//                 table_[i] = 0;
-//                 n_cell_moves_[i] = 0;
-//             } else {
-//                 table_[i] = (1 << (pos.stones_[p][0] - 1));
-//                 n_cell_moves_[i] = 1;
-//                 n_untried_moves_++;
-//                 seen_dead = true;
-//             }*/
-//         if (cell.adj_.len_ == 0) {
-//             table_[i] = (1 << (pos.stones_[p][0] - 1));
-//             n_cell_moves_[i] = 1;
-//             n_untried_moves_++;
-//         } else {
-//             table_[i] = mask;
-//             n_cell_moves_[i] = (unsigned char)n_stones;
-//             n_untried_moves_ += n_stones;
-//         }
-//     }
-// }
-
-
 void MCTNode::add_child(Position& pos, const Move& move) {
     pos.make_move(move);
     MCTNode * child = get_free();
@@ -115,36 +76,34 @@ void MCTNode::get_children(Position& pos) {
     Value * stones = pos.stones_[p];
     size_t n_stones = pos.n_stones_[p];
     Value stone_value;
-    Value best_single_val = 1000;
-    CellID best_single = 400;
+    Value best_stale_val = 1000;
+    size_t best_stale = NO_CELL;
     for (size_t i = 0; i < pos.open_.len_; i++) {
-        CellID id = pos.open_.val_[i];
-        Cell& cell = pos.cells_[id];
-        Value cell_value = cell.value_ * parity[p];
-        if (cell.adj_.len_ == 0) {
-            if (cell_value < best_single_val) {
-                best_single = id;
-                best_single_val = cell_value;
+        size_t cell_id = pos.open_.val_[i];
+        Value cell_value = pos.value_[cell_id] * parity[p];
+        if (pos.stale_ & (1LL << (int64)cell_id)) {
+            if (cell_value < best_stale_val) {
+                best_stale = cell_id;
+                best_stale_val = cell_value;
             }
         } else {
             size_t j;
             bool pair = false;
-            if (cell.adj_.len_ == 1) {
-                CellID adj_id = cell.adj_.val_[0];
-                Cell& adj = pos.cells_[adj_id];
-                if (adj.adj_.len_ == 1) {
+            if (pos.adj_[cell_id].len_ == 1) {
+                size_t adj_id = pos.adj_[cell_id].val_[0];
+                if (pos.adj_[adj_id].len_ == 1) {
                     pair = true;
-                    Value adj_value = adj.value_ * parity[p];
-                    if (cell_value < adj_value || (cell_value == adj_value && id < adj_id)) {
+                    Value adj_value = pos.value_[adj_id] * parity[p];
+                    if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
                         stone_value = parity[p] * stones[0];
-                        add_child(pos, Move(id, stone_value));
+                        add_child(pos, Move(cell_id, stone_value));
                         Value control_req = parity[p] * (alpha_ - OFFSET[p]);
                         if (adj_value + stones[0] < control_req) {
                             Value extra = control_req - adj_value;
                             for (j = 1; j < n_stones && stones[j] < extra; j++) {}
                             if (j < n_stones) {
                                 stone_value = parity[p] * stones[j];
-                                add_child(pos, Move(id, stone_value));
+                                add_child(pos, Move(cell_id, stone_value));
                             }
                         }       
                     }
@@ -153,14 +112,14 @@ void MCTNode::get_children(Position& pos) {
             if (! pair) {
                 for (j = 0; j < n_stones; j++) {
                     stone_value = parity[p] * stones[j];
-                    add_child(pos, Move(id, stone_value));
+                    add_child(pos, Move(cell_id, stone_value));
                 }
             }
         }
     }
-    if (best_single != 400) {
+    if (best_stale != NO_CELL) {
         stone_value = stones[0] * parity[p];
-        add_child(pos, Move(best_single, stone_value));
+        add_child(pos, Move(best_stale, stone_value));
     }
 }
 
@@ -215,6 +174,7 @@ bool MCTNode::light_playout(Position& pos) {
     int move_count;
     bool result = true;
     bool result_found = false;
+    //pos.take_snapshot();
     for (move_count = 0; pos.open_.len_ > 1; move_count++) {
         if (pos.is_winning(RED)) {
             result = true;
@@ -226,14 +186,16 @@ bool MCTNode::light_playout(Position& pos) {
             result_found = true;
             break;
         } 
-        playout_moves[move_count] = pos.get_default_policy_move();
         //playout_moves[move_count] = pos.get_random_move();
+        playout_moves[move_count] = pos.get_default_policy_move();
         pos.make_move(playout_moves[move_count]);
+        //pos.make_move(pos.get_default_policy_move());
     }
     if (! result_found)
-        result = (pos.cells_[pos.open_.val_[0]].value_ >= alpha_);
+        result = (pos.value_[pos.open_.val_[0]] >= alpha_);
     for (move_count--; move_count >= 0; move_count--)
         pos.unmake_move(playout_moves[move_count]);
+    //pos.restore_snapshot();
     return result;
 }
 
@@ -244,8 +206,6 @@ void MCTNode::ucb(Position& pos) {
 #endif
     MCTNode * search_root = this;
     while (search_root->expanded_) {
-        //fprintf(stderr, "selecting\n");
-        //fflush(stderr);
         search_root = search_root->select(pos);
 #ifdef DEBUG_
         assert(search_root != NULL);
@@ -267,9 +227,9 @@ void MCTNode::ucb(Position& pos) {
         if (search_root->fully_explored_ && search_root->expanded_) {
             search_root->val_ = -1000.0;
             for (size_t i = 0; i < search_root->children_.size(); i++)
-                if (search_root->children_[i]->val_ * parity[pos.turn_] > search_root->val_)
-                    search_root->val_ = search_root->children_[i]->val_ * parity[pos.turn_];
-            search_root->val_ *= parity[pos.turn_];
+                if (search_root->children_[i]->val_ * pos.m_ > search_root->val_)
+                    search_root->val_ = search_root->children_[i]->val_ * pos.m_;
+            search_root->val_ *= pos.m_;
         }
         if (! search_root->fully_explored_) {
             search_root->n_red_wins_ += result;
@@ -300,17 +260,13 @@ Move MCTNode::get_highest_value_move(Position& pos) {
     Move best_move;
     Real best_val = -1000.0;
     size_t n_playouts = 0;
-    //fprintf(stderr, "Choosing highest value move\n");
-    //pos.print(stderr);
     for (size_t i = 0; i < children_.size(); i++) {
-        //char move_str[10];
-        //children_[i]->move_.to_str(move_str);
-        //fprintf(stderr, "%s: %lf\n", move_str, children_[i]->val_);
-        if ((! fully_explored_ || children_[i]->fully_explored_) &&
-                children_[i]->val_ * parity[pos.turn_] > best_val) {
-            best_move = children_[i]->move_;
-            best_val = children_[i]->val_ * parity[pos.turn_];
-            n_playouts = children_[i]->n_playouts_;
+        MCTNode * child = children_[i];
+        if ((! fully_explored_ || child->fully_explored_) &&
+                child->val_ * pos.m_ > best_val) {
+            best_move = child->move_;
+            best_val = child->val_ * pos.m_;
+            n_playouts = child->n_playouts_;
         }
     }
     fprintf(stderr, "Selected move has %u playouts\n", n_playouts);
@@ -322,38 +278,14 @@ Move MCTNode::get_most_played_move() {
     Move best_move;
     size_t most_visits = 0;
     for (size_t i = 0; i < children_.size(); i++) {
-        if (children_[i]->n_playouts_ > most_visits) {
-            best_move = children_[i]->move_;
-            most_visits = children_[i]->n_playouts_;
+        MCTNode * child = children_[i];
+        if (child->n_playouts_ > most_visits) {
+            best_move = child->move_;
+            most_visits = child->n_playouts_;
         }
     }
     fprintf(stderr, "Selected move has %d playouts\n", most_visits);
     return best_move;
-}
-
-
-Move MCTNode::get_best_move(Position& pos) {
-    long long start_micros = get_time();
-    long long time_now = start_micros;
-    long long move_time = 300000LL;
-    while (! fully_explored_ && time_now - start_micros < move_time) {
-        for (size_t i = 0; i < 100 && ! fully_explored_; i++) {
-            //fprintf(stderr, "Running UCB\n");
-            //fflush(stderr);
-            ucb(pos);
-            //fprintf(stderr, "Finished running UCB\n");
-            //fflush(stderr);
-        }
-        time_now = get_time();
-    }
-    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts_, (double)(time_now - start_micros) / 1e6);
-
-    if (fully_explored_) {
-        fprintf(stderr, "Search tree fully explored\n");
-        return get_highest_value_move(pos);
-    }
-
-    return get_most_played_move();
 }
 
 

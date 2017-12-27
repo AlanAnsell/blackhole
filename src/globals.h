@@ -22,6 +22,7 @@
 #define N_BLOCKED_CELLS 5
 #define MIN_RESULT -75
 #define MAX_RESULT 75
+#define NO_CELL 400
 
 typedef int Value;
 typedef size_t CellID;

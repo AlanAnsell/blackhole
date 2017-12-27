@@ -42,8 +42,6 @@ public:
 
     bool light_playout(Position& pos);
 
-    Move get_best_move(Position& pos);
-
     Move get_most_played_move();
 
     Move get_highest_value_move(Position& pos);

@@ -275,9 +275,9 @@ Move Position::get_default_policy_move() {
             }
         } else {
             if ((bool)(controls_ & (1LL << int64(id))) == (bool)turn_)
-                tickets[i] = 5;
+                tickets[i] = 3;
             else
-                tickets[i] = 25;
+                tickets[i] = 9;
             total_tickets += tickets[i];
         }
     }

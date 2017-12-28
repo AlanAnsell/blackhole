@@ -1,5 +1,6 @@
 #include "globals.h"
 #include "Position.h"
+#include "AMAF.h"
 
 
 class MCTNode {
@@ -16,8 +17,13 @@ public:
     bool expanded_;
 
     size_t n_children_fully_explored_;
+    size_t n_children_;
+    size_t n_child_moves_;
+    std::vector<Move> child_moves_;
     std::vector<MCTNode*> children_;
-    
+
+    AMAFTable amaf_[2];
+
     //Bitmask table_[N_CELLS];
     
     //MCTNode ** table_[N_CELLS];
@@ -30,17 +36,15 @@ public:
 
     void ucb(Position& pos);
     
-    MCTNode * select(Position& pos);
+    MCTNode * select(Position& pos, AMAFTable& amaf);
 
-    //void fill_move_table(Position& pos);
-
-    void add_child(Position& pos, const Move& move);
+    MCTNode *  add_child(Position& pos, const Move& move);
 
     void get_children(Position& pos);
 
-    MCTNode * expand(Position& pos);
+    MCTNode * expand(Position& pos, AMAFTable& amaf);
 
-    bool light_playout(Position& pos);
+    bool light_playout(Position& pos, size_t& move_count);
 
     Move get_most_played_move();
 

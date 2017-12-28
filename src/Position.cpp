@@ -46,8 +46,10 @@ Position::Position(size_t blocked[N_BLOCKED_CELLS], Value alpha): turn_(RED), m_
 
     for (size_t p = 0; p < 2; p++) {
         n_stones_[p] = N_STONES;
-        for (i = 0; i < N_STONES; i++)
+        for (i = 0; i < N_STONES; i++) {
             stones_[p][i] = i + 1;
+            stone_loc_[p][i+1] = i;
+        }
     }
     set_alpha(alpha);
 }
@@ -77,13 +79,16 @@ void Position::make_move(const Move& move) {
     size_t cell_id = move.cell_;
     Value stone_number = m_ * move.stone_value_;
     Value * stones = stones_[turn_];
+    size_t * stone_loc = stone_loc_[turn_];
     size_t& n_stones = n_stones_[turn_];
     n_stones--;
     size_t i = 0;
     while (stones[i] != stone_number)
         i++;
-    for (; i < n_stones; i++)
+    for (; i < n_stones; i++) {
         stones[i] = stones[i+1];
+        stone_loc[stones[i]] = i;
+    }
     turn_ ^= 1;
     m_ *= -1;
 
@@ -158,10 +163,13 @@ void Position::unmake_move(const Move& move) {
     size_t cell_id = move.cell_;
     Value stone_number = m_ * move.stone_value_;
     Value * stones = stones_[turn_];
+    size_t * stone_loc = stone_loc_[turn_];
     size_t& n_stones = n_stones_[turn_];
     size_t i;
-    for (i = n_stones; i && stone_number < stones[i-1]; i--)
+    for (i = n_stones; i && stone_number < stones[i-1]; i--) {
         stones[i] = stones[i-1];
+        stone_loc[stones[i]] = i;
+    }
     stones[i] = stone_number;
     n_stones++;
    
@@ -563,9 +571,12 @@ void Position::restore_snapshot() {
         size_t n_stones = snapshot_.n_stones_[p];
         n_stones_[p] = n_stones;
         Value * stones = stones_[p];
+        size_t * stone_loc = stone_loc_[p];
         Value * snapshot_stones = snapshot_.stones_[p];
-        for (i = 0; i < n_stones; i++)
+        for (i = 0; i < n_stones; i++) {
             stones[i] = snapshot_stones[i];
+            stone_loc[stones[i]] = i;
+        }
 
         n_controls_[p] = snapshot_.n_controls_[p];
         dead_[p] = snapshot_.dead_[p];
@@ -573,6 +584,12 @@ void Position::restore_snapshot() {
         stale_[p] = snapshot_.stale_[p];
         n_stale_[p] = snapshot_.n_stale_[p];
     }
+}
+
+
+std::pair<size_t, size_t> Position::get_cell_and_stone_indices(const Move& move) {
+    return std::pair<size_t, size_t>(open_.loc_[move.cell_],
+                                     stone_loc_[turn_][m_ * move.stone_value_]);
 }
 
 

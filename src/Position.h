@@ -97,7 +97,8 @@ public:
     Value value_[N_CELLS];
 
 	Value stones_[2][N_STONES];
-	size_t n_stones_[2];
+	size_t stone_loc_[2][N_STONES+1];
+    size_t n_stones_[2];
 	size_t turn_;
     int m_;
 
@@ -153,6 +154,8 @@ public:
     void take_snapshot();
 
     void restore_snapshot();
+
+    std::pair<size_t, size_t> get_cell_and_stone_indices(const Move& move);
 
     void print(FILE * f);    
 };

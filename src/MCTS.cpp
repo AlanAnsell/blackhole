@@ -380,16 +380,19 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
 Move MCTSearch::get_best_move(Position& pos) {
     long long start_micros = get_time();
     long long time_now = start_micros;
-    long long move_time = std::min(time_left / 2LL, 1000000LL);
-    long long alpha_time = std::min(move_time / 3LL, 330000LL);
+    long long move_time = std::min(time_left / 2LL, 900000LL);
+    long long alpha_time = move_time / 3LL;
     fprintf(stderr, "Move time = %lld\n", move_time);
     fprintf(stderr, "Alpha time = %lld\n", alpha_time);
     size_t n_playouts = 0;
     size_t i;
     MCTNode * root;
     
-    if (pos.open_.len_ >= 24)
-        return pos.get_expectation_maximising_move();
+    if (pos.open_.len_ >= 26) {
+        std::pair<Real, Move> search_result = pos.get_best_move();
+        //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
+        return search_result.second;
+    }
     
     while (time_now - start_micros < alpha_time) {
         pos.set_alpha(current_alpha_);

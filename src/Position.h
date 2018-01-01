@@ -70,6 +70,7 @@ public:
 
 struct Snapshot {
     size_t n_open_;
+    int64 open_mask_;
     size_t open_[N_CELLS];
     size_t adj_[N_CELLS][MAX_DEGREE];
     size_t n_adj_[N_CELLS];
@@ -93,6 +94,7 @@ struct Snapshot {
 class Position {
 public:
     List open_;
+    int64 open_mask_;
     List adj_[N_CELLS];
     Value value_[N_CELLS];
 
@@ -133,7 +135,15 @@ public:
 
     Move get_expectation_maximising_move();
 
-	Real calculate_expectation() const;		
+	Real calculate_win_prob(Value alpha) const;
+  
+    std::pair<Real, Move> get_best_alpha_move(Value alpha);
+
+    std::pair<Real, Move> get_best_move();
+
+    Real calculate_expectation() const;		
+
+    std::pair<Real, Move> search_expectation(size_t depth, Real a, Real b);
 
     Real get_control_heuristic() const;
 

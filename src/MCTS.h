@@ -1,3 +1,6 @@
+#ifndef MCTS_H_
+#define MCTS_H_
+
 #include "globals.h"
 #include "Position.h"
 #include "AMAF.h"
@@ -84,3 +87,4 @@ public:
 
 };
 
+#endif

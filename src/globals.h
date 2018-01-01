@@ -24,11 +24,13 @@
 #define MAX_RESULT 75
 #define NO_CELL 400
 
+#define MASK(x) (1LL << (int64)(x))
+
 typedef int Value;
 typedef size_t CellID;
 typedef double Real;
 typedef int Bitmask;
-typedef long long int64;
+typedef unsigned long long int64;
 
 extern const char * ENGINE_NAME;
 extern const char * VERSION_NUMBER;
@@ -50,6 +52,12 @@ extern size_t ROW[N_CELLS];
 extern size_t NUM[N_CELLS];
 extern CellID ADJ[N_CELLS][MAX_DEGREE];
 extern size_t N_ADJ[N_CELLS];
+extern int64 ADJ_MASK[N_CELLS];
+
+extern const int64 debruijn;
+extern const size_t index64[64];
+#define LSB(x) ((x) & -(x))
+#define INDEX(x) (index64[((x) * debruijn) >> 58])
 
 
 CellID row_and_num_to_id(size_t row, size_t num);
@@ -61,7 +69,7 @@ CellID cell_name_to_id(const char * name);
 void init();
 
 
-#define N_MCT_NODES 3000000
+#define N_MCT_NODES 200000
 
 extern const Real UCB_C;
 

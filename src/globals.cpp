@@ -1,7 +1,7 @@
 #include "globals.h"
 
-const char * ENGINE_NAME = "Blackhole";
-const char * VERSION_NUMBER = "0.0.0";
+const char * ENGINE_NAME = "EventHorizon";
+const char * VERSION_NUMBER = "2.2.0";
 
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
@@ -38,7 +38,7 @@ size_t ROW[N_CELLS];
 size_t NUM[N_CELLS];
 CellID ADJ[N_CELLS][MAX_DEGREE];
 size_t N_ADJ[N_CELLS];
-
+int64 ADJ_MASK[N_CELLS];
 
 CellID row_and_num_to_id(size_t row, size_t num) {
     return num + row * (row + 1) / 2;
@@ -57,6 +57,20 @@ CellID cell_name_to_id(const char * name) {
     size_t row = num + (name[0] - 'A');
     return row_and_num_to_id(row, num);
 }
+
+
+const int64 debruijn = 0x03f79d71b4cb0a89LL;
+
+const size_t index64[64] = {
+    0,  1, 48,  2, 57, 49, 28,  3,
+   61, 58, 50, 42, 38, 29, 17,  4,
+   62, 55, 59, 36, 53, 51, 43, 22,
+   45, 39, 33, 30, 24, 18, 12,  5,
+   63, 47, 56, 27, 60, 41, 37, 16,
+   54, 35, 52, 21, 44, 32, 23, 11,
+   46, 26, 40, 15, 34, 20, 31, 10,
+   25, 14, 19,  9, 13,  8,  7,  6
+};
 
 
 void init() {
@@ -92,7 +106,12 @@ void init() {
             ADJ[right][N_ADJ[right]++] = id;
         }
     }
-
+    
+    for (id = 0; id < N_CELLS; id++) {
+        ADJ_MASK[id] = 0;
+        for (size_t j = 0; j < N_ADJ[id]; j++)
+            ADJ_MASK[id] |= (1LL << (int64)ADJ[id][j]);
+    }
 }
 
 

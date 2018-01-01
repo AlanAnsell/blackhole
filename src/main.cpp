@@ -56,3 +56,5 @@ int main(int argc, char** argv) {
 // EventHorizon1_2_0: remove Cell class, add stale cell tracking
 // EventHorizon1_2_1: don't generate moves with stones which can be placed in stale cells, +0.95 vs player3
 // EventHorizon2_0_0: use AMAF for move ordering, +0.37 vs 1_2_2 (400 games)
+// EventHorizon2_1_0: use bit operations to find stale cells
+// EventHorizon2_2_0: use win prob with random play at alpha level for first 3 moves, +0.55 vs 2_1_0 (400 gmes)

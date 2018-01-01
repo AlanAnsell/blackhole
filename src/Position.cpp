@@ -27,6 +27,7 @@ bool Move::operator < (const Move& other) const {
 Position::Position(size_t blocked[N_BLOCKED_CELLS], Value alpha): turn_(RED), m_(parity[RED]) {
     size_t i, j;
     open_.init(N_CELLS, N_CELLS);
+    open_mask_ = 0;
     for (i = 0; i < N_CELLS; i++) {
         value_[i] = 0;
         size_t degree = N_ADJ[i];
@@ -38,9 +39,12 @@ Position::Position(size_t blocked[N_BLOCKED_CELLS], Value alpha): turn_(RED), m_
     bool is_blocked[N_CELLS] = {false};
     for (i = 0; i < N_BLOCKED_CELLS; i++)
         is_blocked[blocked[i]] = true;
-    for (i = 0; i < N_CELLS; i++)
-        if (! is_blocked[i])
+    for (i = 0; i < N_CELLS; i++) {
+        if (! is_blocked[i]) {
+            open_mask_ |= MASK(i);
             open_.add(i);
+        }
+    }
     for (i = 0; i < N_BLOCKED_CELLS; i++)
         fill(blocked[i], 0);
 
@@ -92,9 +96,10 @@ void Position::make_move(const Move& move) {
     turn_ ^= 1;
     m_ *= -1;
 
+    int64 cell_mask = MASK(cell_id);
+    open_mask_ ^= cell_mask;
     open_.remove(cell_id);
     
-    int64 cell_mask = (1LL << (int64)cell_id);
     if (controls_ & cell_mask)
         n_controls_[BLUE]--;
     else
@@ -173,9 +178,10 @@ void Position::unmake_move(const Move& move) {
     stones[i] = stone_number;
     n_stones++;
    
+    int64 cell_mask = (1LL << (int64)cell_id);
+    open_mask_ |= cell_mask;
     open_.readd(cell_id); 
     
-    int64 cell_mask = (1LL << (int64)cell_id);
     unfill(cell_id, move.stone_value_);
     if (controls_ & cell_mask)
         n_controls_[BLUE]++;
@@ -219,16 +225,28 @@ void Position::unmake_move(const Move& move) {
             }
         }
     }
-    for (i = 0; i < open_.len_; i++) {
-        size_t id = open_.val_[i];
-        int64 mask = (1LL << (int64)id);
-        if ((stale_[RED] & mask) || (stale_[BLUE] & mask)) {
-            if ((! (dead_[RED] & mask) && ! (dead_[BLUE] & mask)) || ! all_adj_dead(id)) {
-                if (stale_[RED] & mask) {
-                    stale_[RED] ^= mask;
+
+    int64 dead = open_mask_ & (dead_[RED] | dead_[BLUE]);
+    int64 stale = open_mask_ & (stale_[RED] | stale_[BLUE]);
+    int64 stale_it = stale;
+    while (stale_it) {
+        int64 lsb = LSB(stale_it);
+        stale_it ^= lsb;
+        if (lsb & stale) {
+            bool still_stale = true;
+            if (! (dead & lsb))
+                still_stale = false;
+            else {
+                int64 adj_mask = ADJ_MASK[INDEX(lsb)];
+                if ((dead & adj_mask) != (open_mask_ & adj_mask))
+                    still_stale = false;
+            }
+            if (! still_stale) {
+                if (stale_[RED] & lsb) {
+                    stale_[RED] ^= lsb;
                     n_stale_[RED]--;
                 } else {
-                    stale_[BLUE] ^= mask;
+                    stale_[BLUE] ^= lsb;
                     n_stale_[BLUE]--;
                 }
             }
@@ -373,6 +391,109 @@ Move Position::get_expectation_maximising_move() {
 }
 
 
+size_t ways[MAX_DEGREE + 1][2 * N_STONES + 1][2 * MAX_RESULT + 1];
+size_t combos[MAX_DEGREE + 1];
+Value stone_list[2 * N_STONES];
+
+Real Position::calculate_win_prob(Value alpha) const {
+    size_t i, j, n_stones = 0;
+    Value k;
+    for (i = 0; i < 2; i++)
+        for (j = 0; j < n_stones_[i]; j++)
+            stone_list[n_stones++] = stones_[i][j] * parity[i];
+    //for (i = 0; i < n_stones; i++)
+    //    fprintf(stderr, "%d\n", stone_list[i]);
+    memset(ways, 0, sizeof(ways));
+    for (i = 0; i <= n_stones; i++)
+        ways[0][i][MAX_RESULT] = 1;
+    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++) {
+        for (j = 1; j <= n_stones; j++) {
+            Value val = stone_list[j-1];
+            for (k = 0; k <= 2 * MAX_RESULT; k++) {
+                size_t& ans = ways[i][j][k];
+                ans = ways[i][j-1][k];
+                if (k - val >= 0 && k - val <= 2 * MAX_RESULT)
+                    ans += ways[i-1][j-1][k-val];
+            }
+        }
+    }
+    //fprintf(stderr, "n_stones = %u\n", n_stones);
+    combos[0] = 1;
+    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++) {
+        combos[i] = combos[i-1] * (n_stones + 1 - i) / i;
+#ifdef DEBUG_
+        size_t n_ways = 0;
+        for (j = 0; j <= 2 * MAX_RESULT; j++) {
+            //fprintf(stderr, "%u: %u\n", j, ways[i][2][j]);
+            n_ways += ways[i][n_stones][j];
+        }
+        if (n_ways != combos[i]) {
+            fprintf(stderr, "n_ways = %u, n_combos = %u\n", n_ways, combos[i]);
+            fflush(stderr);
+        }
+        assert(n_ways == combos[i]);
+#endif
+    }
+    Real prob_sum = 0.0;
+    for (i = 0; i < open_.len_; i++) {
+        size_t cell_id = open_.val_[i];
+        size_t n_adj = adj_[cell_id].len_;
+        Value val = value_[cell_id];
+        Value diff = alpha - val;
+        size_t n_acceptable_outcomes = 0;
+        for (k = diff + MAX_RESULT; k <= 2 * MAX_RESULT; k++)
+            n_acceptable_outcomes += ways[n_adj][n_stones][k];
+        prob_sum += (Real)n_acceptable_outcomes / (Real)combos[n_adj];
+    }
+    return prob_sum / open_.len_;
+}
+
+
+std::pair<Real, Move> Position::get_best_alpha_move(Value alpha) {
+    Move best_move;
+    Real best_prob = -1000.0;
+    Value * stones = stones_[turn_];
+    size_t n_stones = n_stones_[turn_];
+    for (size_t i = 0; i < open_.len_; i++) {
+        for (size_t j = 0; j < n_stones; j++) {
+            Value stone_value = m_ * stones[j];
+            Move move(open_.val_[i], stone_value);
+            make_move(move);
+            Real prob = calculate_win_prob(alpha);
+            unmake_move(move);
+            if (turn_ == BLUE)
+                prob = 1.0 - prob;
+            if (prob > best_prob) {
+                best_move = move;
+                best_prob = prob;
+            }
+        }
+    }
+    return std::pair<Real, Move>(best_prob, best_move);
+}
+
+
+std::pair<Real, Move> Position::get_best_move() {
+    Value alpha = 0;
+    Value best_alpha = 400;
+    Move best_move;
+    Real best_prob = 0.0;
+    while (alpha != best_alpha && alpha >= MIN_RESULT && alpha <= MAX_RESULT) {
+        std::pair<Real, Move> result = get_best_alpha_move(alpha);
+        fprintf(stderr, "Alpha = %d: %.5lf\n", alpha, result.first);
+        if (result.first >= 0.5) {
+            best_move = result.second;
+            best_prob = result.first;
+            best_alpha = alpha;
+            alpha += m_;
+        } else {
+            alpha -= m_;
+        }
+    }
+    return std::pair<Real, Move>(best_prob, best_move);
+}
+
+
 Real Position::calculate_expectation() const {
     if (open_.len_ == 1)
         return (Real)(value_[open_.val_[0]]);
@@ -390,6 +511,36 @@ Real Position::calculate_expectation() const {
 }
 
 
+std::pair<Real, Move> Position::search_expectation(size_t depth, Real a, Real b) {
+    if (depth == 0)
+        return std::pair<Real, Move>(calculate_expectation(), Move());
+    Real best_val = -1000.0;
+    Move best_move;
+    size_t n_stones = n_stones_[turn_];
+    Value * stones = stones_[turn_];
+    for (size_t i = 0; i < open_.len_; i++) {
+        size_t cell_id = open_.val_[i];
+        for (size_t j = 0; j < n_stones; j++) {
+            Move move(cell_id, stones[j] * m_);
+            make_move(move);
+            std::pair<Real, Move> result = search_expectation(depth - 1, b, a);
+            unmake_move(move);
+            Real val = result.first * m_;
+            if (val > best_val) {
+                best_move = move;
+                best_val = val;
+                if (val > a) {
+                    a = val;
+                    if (a >= -b)
+                        return std::pair<Real, Move>(m_ * best_val, best_move);
+                }
+            }
+        }
+    }
+    return std::pair<Real, Move>(m_ * best_val, best_move);
+}
+
+        
 Real Position::get_control_heuristic() const {
     return (Real)n_controls_[RED] / (Real)open_.len_;
 }
@@ -445,17 +596,20 @@ bool Position::all_adj_dead(size_t cell_id) {
 
 
 void Position::find_stale_cells() {
-    for (size_t i = 0; i < open_.len_; i++) {
-        size_t cell_id = open_.val_[i];
-        int64 mask = (1LL << (int64)cell_id);
-        if (! (stale_[RED] & mask) && ! (stale_[BLUE] & mask) &&
-                ((dead_[RED] & mask) || (dead_[BLUE] & mask))) {
-            if (all_adj_dead(cell_id)) {
-                if (dead_[RED] & mask) {
-                    stale_[RED] |= mask;
+    int64 dead = open_mask_ & (dead_[RED] | dead_[BLUE]);
+    int64 dead_it = dead;
+    int64 stale = open_mask_ & (stale_[RED] | stale_[BLUE]);
+    while (dead_it) {
+        int64 lsb = LSB(dead_it);
+        dead_it ^= lsb;
+        if (! (stale & lsb)) {
+            int64 adj_mask = ADJ_MASK[INDEX(lsb)];
+            if ((dead & adj_mask) == (open_mask_ & adj_mask)) {
+                if (dead_[RED] & lsb) {
+                    stale_[RED] |= lsb;
                     n_stale_[RED]++;
                 } else {
-                    stale_[BLUE] |= mask;
+                    stale_[BLUE] |= lsb;
                     n_stale_[BLUE]++;
                 }
             }
@@ -515,6 +669,7 @@ void Position::set_alpha(Value alpha) {
 void Position::take_snapshot() {
     size_t i, j, p;
     snapshot_.turn_ = turn_;
+    snapshot_.open_mask_ = open_mask_;
     snapshot_.n_open_ = open_.len_;
     snapshot_.controls_ = controls_;
     for (i = 0; i < open_.len_; i++) {
@@ -551,6 +706,7 @@ void Position::restore_snapshot() {
     turn_ = snapshot_.turn_;
     m_ = parity[turn_];
     open_.len_ = snapshot_.n_open_;
+    open_mask_ = snapshot_.open_mask_;
     controls_ = snapshot_.controls_;
     for (i = 0; i < snapshot_.n_open_; i++) {
         size_t cell_id = snapshot_.open_[i];

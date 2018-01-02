@@ -59,3 +59,4 @@ int main(int argc, char** argv) {
 // EventHorizon2_1_0: use bit operations to find stale cells
 // EventHorizon2_2_0: use win prob with random play at alpha level for first 3 moves, +0.55 vs 2_1_0 (400 gmes)
 // EventHorizon2_3_0: implement endgame solver
+// EventHorizon2_4_3: add hash table to endgame solver, adjust time management

@@ -1,7 +1,7 @@
 #include "globals.h"
 
 const char * ENGINE_NAME = "EventHorizon";
-const char * VERSION_NUMBER = "2.2.0";
+const char * VERSION_NUMBER = "2.4.1";
 
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
@@ -76,6 +76,7 @@ const size_t index64[64] = {
 void init() {
 	fprintf(stderr, "R %s %s\n", ENGINE_NAME, VERSION_NUMBER);
 #ifndef DEBUG_
+    fflush(stderr);
     srand(time(NULL));
 #endif
 

@@ -29,6 +29,7 @@ public:
     bool solve_attempted_;
     Move solution_;
     size_t solver_positions_;
+    size_t solver_hash_hits_;
     long long solver_time_;
 
     AMAFTable amaf_[2];
@@ -48,7 +49,7 @@ public:
 
     bool light_playout(Position& pos, size_t& move_count);
 
-    void attempt_solve(Position& pos);
+    void attempt_solve(Position& pos, HashTable& table);
 
     Move get_most_played_move();
 
@@ -77,6 +78,7 @@ public:
 
     MCTNode * roots_[MAX_RESULT * 2 + 1];
     Value current_alpha_;
+    HashTable table_;
 
     MCTSearch(const Position& pos, Value alpha);
 

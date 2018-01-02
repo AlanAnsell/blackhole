@@ -90,6 +90,68 @@ struct Snapshot {
     size_t n_stale_[2];
 };
 
+class HashInfo;
+
+#define HASH_COEFFICIENT 6787142722019916807ULL
+#define HASH_SIZE_BASE 15
+#define HASH_L (64 - HASH_SIZE_BASE)
+#define HASH_SIZE (1 << HASH_SIZE_BASE)
+#define BUCKET_SIZE 10
+#define NO_HASH_ENTRY 2
+// High Speed Hashing for Integers and Strings
+// Mikkel Thorup July 15, 2014
+#define HASH_BITMASKS(x, y) ((HASH_COEFFICIENT * (x) * (y)) >> HASH_L)
+
+
+class HashRecord {
+public:
+    int64 red_;
+    int64 blue_;
+    size_t result_;
+};
+
+
+class HashTable {
+public:
+    size_t n_records_[HASH_SIZE];
+    HashRecord table_[HASH_SIZE][BUCKET_SIZE];
+    
+    void init() {
+        for (size_t i = 0; i < HASH_SIZE; i++)
+            n_records_[i] = 0;
+    }
+
+    void add(int64 red, int64 blue, size_t result) {
+        int64 hash = HASH_BITMASKS(red, blue);
+        //fprintf(stderr, "Hash: %llu\n", hash);
+        size_t& n_records = n_records_[hash];
+        if (n_records < BUCKET_SIZE - 1) {
+            HashRecord& hash_record = table_[hash][n_records];
+            hash_record.red_ = red;
+            hash_record.blue_ = blue;
+            hash_record.result_ = result;
+            n_records++;
+        }
+#ifdef DEBUG_
+        else {
+            //fprintf(stderr, "Hash bucket %llu overflowed\n", hash);
+        }
+#endif
+    }
+
+    size_t find(int64 red, int64 blue) {
+        int64 hash = HASH_BITMASKS(red, blue);
+        size_t n_records = n_records_[hash];
+        HashRecord * records = table_[hash];
+        for (size_t i = 0; i < n_records; i++) {
+            HashRecord& record = records[i];
+            if (record.red_ == red && record.blue_ == blue)
+                return record.result_;
+        }
+        return NO_HASH_ENTRY;
+    }
+
+};
 
 class Position {
 public:
@@ -153,9 +215,11 @@ public:
 
     void get_all_reasonable_moves(std::vector<Move>& moves);
 
-    size_t solve(long long end_time, size_t& counter);
+    size_t solve(long long end_time, size_t& counter, size_t& hash_hits,
+            HashTable& table, HashInfo& hash_info, int64 stone_masks[2]);
 
-    std::pair<size_t, Move> get_optimal_move(long long end_time, size_t& counter, bool break_ties);
+    std::pair<size_t, Move> get_optimal_move(
+            long long end_time, size_t& counter, size_t& hash_hits, bool break_ties, HashTable& table);
 
     bool is_dead(size_t cell_id, size_t p, Value * other_power);
 
@@ -175,5 +239,25 @@ public:
 
     void print(FILE * f);    
 };
+
+class HashInfo {
+public:
+    size_t cell_index_[N_CELLS];
+    size_t stone_shift_[2][N_STONES+1];
+
+    HashInfo(const Position& pos) {
+        size_t i;
+        for (i = 0; i < pos.open_.len_; i++)
+            cell_index_[pos.open_.val_[i]] = i + 1;
+        for (size_t p = 0; p < 2; p++) {
+            size_t n_stones = pos.n_stones_[p];
+            const Value * stones = pos.stones_[p];
+            for (size_t i = 0; i < n_stones; i++)
+                stone_shift_[p][stones[i]] = 5 * i;
+        }
+    }
+
+};
+
 
 #endif

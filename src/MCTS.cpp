@@ -34,6 +34,7 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
     solved_ = false;
     solve_attempted_ = false;
     solver_positions_ = 0;
+    solver_hash_hits_ = 0;
     solver_time_ = 0;
     if (parent == NULL) {
         amaf_[0].init(pos.open_.len_, pos.n_stones_[RED]);
@@ -246,11 +247,11 @@ Move MCTNode::get_most_played_move() {
 }
 
 
-void MCTNode::attempt_solve(Position& pos) {
+void MCTNode::attempt_solve(Position& pos, HashTable& table) {
     solve_attempted_ = true;
     long long start_time = get_time();
-    long long end_time = start_time + 10000;
-    std::pair<size_t, Move> result = pos.get_optimal_move(end_time, solver_positions_, false);
+    long long end_time = start_time + 100000;
+    std::pair<size_t, Move> result = pos.get_optimal_move(end_time, solver_positions_, solver_hash_hits_, false, table);
     solver_time_ = get_time() - start_time;
     if (result.first != TIME_ELAPSED) {
         if (result.first == RED)
@@ -274,9 +275,11 @@ void MCTNode::print(FILE * f) {
     if (solve_attempted_) {
         Real solver_time = (Real)solver_time_ / 1.0e6;
         if (solved_)
-            sprintf(solve_status, "(solver SUCCEEDED: %u nodes, %.4lfs)", solver_positions_, solver_time);
+            sprintf(solve_status, "(solver SUCCEEDED: %u nodes, %u hash hits, %.4lfs)",
+                    solver_positions_, solver_hash_hits_, solver_time);
         else
-            sprintf(solve_status, "(solver FAILED: %u nodes, %.4lfs)", solver_positions_, solver_time);
+            sprintf(solve_status, "(solver FAILED: %u nodes, %u hash hits, %.4lfs)",
+                    solver_positions_, solver_hash_hits_, solver_time);
     } else {
         solve_status[0] = 0;
     }
@@ -372,27 +375,37 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
 
 
 Move MCTSearch::get_best_move(Position& pos) {
+    if (pos.open_.len_ >= 28) {
+        std::pair<Real, Move> search_result = pos.get_best_move();
+        //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
+        return search_result.second;
+    }
+    
+    Real time_left_r = (Real) time_left;
+    Real use_proportion;
+    int moves_left = ((int)pos.open_.len_ - 16) / 2;
+    if (moves_left < 1)
+        use_proportion = 0.5;
+    else {
+        fprintf(stderr, "Expecting to make %d more moves before position solved\n", moves_left);
+        use_proportion = 1.0 - pow(5e5 / time_left_r, 1.0 / (Real)moves_left);
+    }
+    long long move_time = (long long)(use_proportion * time_left_r);
     long long start_micros = get_time();
     long long time_now = start_micros;
-    long long move_time = std::min(time_left / 2LL, 900000LL);
     long long alpha_time = move_time / 3LL;
     fprintf(stderr, "Move time = %lld\n", move_time);
     fprintf(stderr, "Alpha time = %lld\n", alpha_time);
     size_t n_playouts = 0;
     size_t i;
     MCTNode * root;
-    
-    if (pos.open_.len_ >= 26) {
-        std::pair<Real, Move> search_result = pos.get_best_move();
-        //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
-        return search_result.second;
-    }
+    size_t solver_start = 17;
     
     while (time_now - start_micros < alpha_time) {
         pos.set_alpha(current_alpha_);
         root = get_or_make_root(current_alpha_, pos);
-        if (! root->solve_attempted_)
-            root->attempt_solve(pos);
+        if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
+            root->attempt_solve(pos, table_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             root->ucb(pos);
             n_playouts++;
@@ -429,8 +442,8 @@ Move MCTSearch::get_best_move(Position& pos) {
     pos.set_alpha(current_alpha_);
     bool done = false;
     while (time_now - start_micros < move_time) {
-        if (! root->solve_attempted_)
-            root->attempt_solve(pos);
+        if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
+            root->attempt_solve(pos, table_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             root->ucb(pos);
             n_playouts++;

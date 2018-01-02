@@ -24,16 +24,15 @@ public:
     size_t n_child_moves_;
     std::vector<Move> child_moves_;
     std::vector<MCTNode*> children_;
+    
+    bool solved_;
+    bool solve_attempted_;
+    Move solution_;
+    size_t solver_positions_;
+    long long solver_time_;
 
     AMAFTable amaf_[2];
 
-    //Bitmask table_[N_CELLS];
-    
-    //MCTNode ** table_[N_CELLS];
-    //std::vector<std::pair<Real, Move>> untried_moves_;
-    //std::vector<Move> untried_moves_;
-    //unsigned char n_cell_moves_[N_CELLS];
-    //size_t n_untried_moves_;
 
     void init(MCTNode * parent, const Position& pos, const Move& move, Value alpha);
 
@@ -49,11 +48,15 @@ public:
 
     bool light_playout(Position& pos, size_t& move_count);
 
+    void attempt_solve(Position& pos);
+
     Move get_most_played_move();
 
     Move get_highest_value_move(Position& pos);
 
     void dispose();
+
+    void print(FILE * f);
 
 };
 

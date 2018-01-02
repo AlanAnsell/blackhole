@@ -151,6 +151,12 @@ public:
 
     void get_all_moves(std::vector<Move>& moves);
 
+    void get_all_reasonable_moves(std::vector<Move>& moves);
+
+    size_t solve(long long end_time, size_t& counter);
+
+    std::pair<size_t, Move> get_optimal_move(long long end_time, size_t& counter, bool break_ties);
+
     bool is_dead(size_t cell_id, size_t p, Value * other_power);
 
     bool all_adj_dead(size_t cell_id);

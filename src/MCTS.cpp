@@ -31,6 +31,10 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
     n_children_ = 0;
     n_child_moves_ = 0;
     n_children_fully_explored_ = 0;
+    solved_ = false;
+    solve_attempted_ = false;
+    solver_positions_ = 0;
+    solver_time_ = 0;
     if (parent == NULL) {
         amaf_[0].init(pos.open_.len_, pos.n_stones_[RED]);
         amaf_[1].init(pos.open_.len_, pos.n_stones_[BLUE]);
@@ -102,58 +106,7 @@ MCTNode *  MCTNode::add_child(Position& pos, const Move& move) {
 
 
 void MCTNode::get_children(Position& pos) {
-    size_t p = pos.turn_;
-    Value * stones = pos.stones_[p];
-    size_t n_stones = pos.n_stones_[p];
-    Value stone_value;
-    Value best_stale_val = 1000;
-    size_t best_stale = NO_CELL;
-    for (size_t i = 0; i < pos.open_.len_; i++) {
-        size_t cell_id = pos.open_.val_[i];
-        Value cell_value = pos.value_[cell_id] * parity[p];
-        int64 mask = (1LL << (int64)cell_id);
-        if ((pos.stale_[RED] & mask) || (pos.stale_[BLUE] & mask)) {
-            if (cell_value < best_stale_val) {
-                best_stale = cell_id;
-                best_stale_val = cell_value;
-            }
-        } else {
-            if ((pos.dead_[1-p] & mask) || (n_stones > pos.n_dead_[1-p])) {
-                size_t j;
-                bool pair = false;
-                if (pos.adj_[cell_id].len_ == 1) {
-                    size_t adj_id = pos.adj_[cell_id].val_[0];
-                    if (pos.adj_[adj_id].len_ == 1) {
-                        pair = true;
-                        Value adj_value = pos.value_[adj_id] * parity[p];
-                        if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
-                            stone_value = parity[p] * stones[0];
-                            child_moves_.push_back(Move(cell_id, stone_value));
-                            Value control_req = parity[p] * (alpha_ - OFFSET[p]);
-                            if (adj_value + stones[0] < control_req) {
-                                Value extra = control_req - adj_value;
-                                for (j = 1; j < n_stones && stones[j] < extra; j++) {}
-                                if (j < n_stones) {
-                                    stone_value = parity[p] * stones[j];
-                                    child_moves_.push_back(Move(cell_id, stone_value));
-                                }
-                            }       
-                        }
-                    }
-                }
-                if (! pair) {
-                    for (j = pos.n_stale_[1 - p]; j < n_stones; j++) {
-                        stone_value = parity[p] * stones[j];
-                        child_moves_.push_back(Move(cell_id, stone_value));
-                    }
-                }
-            }
-        }
-    }
-    if (best_stale != NO_CELL) {
-        stone_value = stones[0] * parity[p];
-        child_moves_.push_back(Move(best_stale, stone_value));
-    }
+    pos.get_all_reasonable_moves(child_moves_);
     n_child_moves_ = n_children_ = child_moves_.size();
 }
 
@@ -259,6 +212,8 @@ void MCTNode::ucb(Position& pos) {
 
 
 Move MCTNode::get_highest_value_move(Position& pos) {
+    if (solved_)
+        return solution_;
     Move best_move;
     Real best_val = -1000.0;
     size_t n_playouts = 0;
@@ -289,6 +244,45 @@ Move MCTNode::get_most_played_move() {
     fprintf(stderr, "Selected move has %d playouts\n", most_visits);
     return best_move;
 }
+
+
+void MCTNode::attempt_solve(Position& pos) {
+    solve_attempted_ = true;
+    long long start_time = get_time();
+    long long end_time = start_time + 10000;
+    std::pair<size_t, Move> result = pos.get_optimal_move(end_time, solver_positions_, false);
+    solver_time_ = get_time() - start_time;
+    if (result.first != TIME_ELAPSED) {
+        if (result.first == RED)
+            val_ = 1.0;
+        else
+            val_ = 0.0;
+        solved_ = true;
+        fully_explored_ = true;
+        solution_ = result.second;
+    }
+}
+
+
+void MCTNode::print(FILE * f) {
+    char playout_status[20];
+    char solve_status[100];
+    if (solved_)
+        sprintf(playout_status, "*");
+    else
+        sprintf(playout_status, "%u", n_playouts_);
+    if (solve_attempted_) {
+        Real solver_time = (Real)solver_time_ / 1.0e6;
+        if (solved_)
+            sprintf(solve_status, "(solver SUCCEEDED: %u nodes, %.4lfs)", solver_positions_, solver_time);
+        else
+            sprintf(solve_status, "(solver FAILED: %u nodes, %.4lfs)", solver_positions_, solver_time);
+    } else {
+        solve_status[0] = 0;
+    }
+    fprintf(f, "Alpha = %d (%s): %.4f %s\n", alpha_, playout_status, val_, solve_status);
+}
+
 
 
 MCTNode node_store[N_MCT_NODES];
@@ -354,7 +348,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
         for (alpha = MIN_RESULT; alpha <= MAX_RESULT; alpha++) {
             test_root = roots_[alpha + MAX_RESULT];
             if (test_root != NULL) {
-                fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, test_root->n_playouts_, test_root->val_);
+                test_root->print(stderr);
                 if (test_root->val_ >= 0.5 || root == NULL) {
                     current_alpha_ = alpha;
                     root = test_root;
@@ -365,7 +359,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
         for (alpha = MAX_RESULT; alpha >= MIN_RESULT; alpha--) {
             test_root = roots_[alpha + MAX_RESULT];
             if (test_root != NULL) {
-                fprintf(stderr, "Alpha = %d (%u): %.4f\n", alpha, test_root->n_playouts_, test_root->val_);
+                test_root->print(stderr);
                 if (test_root->val_ < 0.5 || root == NULL) {
                     current_alpha_ = alpha;
                     root = test_root;
@@ -397,6 +391,8 @@ Move MCTSearch::get_best_move(Position& pos) {
     while (time_now - start_micros < alpha_time) {
         pos.set_alpha(current_alpha_);
         root = get_or_make_root(current_alpha_, pos);
+        if (! root->solve_attempted_)
+            root->attempt_solve(pos);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             root->ucb(pos);
             n_playouts++;
@@ -431,8 +427,10 @@ Move MCTSearch::get_best_move(Position& pos) {
     Value original_alpha = current_alpha_;
     fprintf(stderr, "Alpha = %d\n", current_alpha_);
     pos.set_alpha(current_alpha_);
-    bool solved = false;
+    bool done = false;
     while (time_now - start_micros < move_time) {
+        if (! root->solve_attempted_)
+            root->attempt_solve(pos);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             root->ucb(pos);
             n_playouts++;
@@ -443,7 +441,7 @@ Move MCTSearch::get_best_move(Position& pos) {
                 pos.set_alpha(current_alpha_);
                 root = get_or_make_root(current_alpha_, pos);
                 if (root->fully_explored_) {
-                    solved = true;
+                    done = true;
                     break;
                 }
             } else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT) {
@@ -451,7 +449,7 @@ Move MCTSearch::get_best_move(Position& pos) {
                 pos.set_alpha(current_alpha_);
                 root = get_or_make_root(current_alpha_, pos);
                 if (root->fully_explored_) {
-                    solved = true;
+                    done = true;
                     break;
                 }
             } else {
@@ -463,7 +461,7 @@ Move MCTSearch::get_best_move(Position& pos) {
     }
 
     current_alpha_ = original_alpha;
-    if (solved)
+    if (done)
         root = select_alpha(pos);
     pos.set_alpha(current_alpha_);
 

@@ -575,6 +575,157 @@ void Position::get_all_moves(std::vector<Move>& moves) {
 }
 
 
+void Position::get_all_reasonable_moves(std::vector<Move>& moves) {
+    Value * stones = stones_[turn_];
+    size_t n_stones = n_stones_[turn_];
+    Value stone_value;
+    Value best_stale_val = 1000;
+    size_t best_stale = NO_CELL;
+    size_t i, j;
+    for (i = 0; i < open_.len_; i++) {
+        size_t cell_id = open_.val_[i];
+        Value cell_value = value_[cell_id] * m_;
+        int64 mask = MASK(cell_id);
+        if ((stale_[RED] & mask) || (stale_[BLUE] & mask)) {
+            if (cell_value < best_stale_val) {
+                best_stale = cell_id;
+                best_stale_val = cell_value;
+            }
+        } else {
+            if ((dead_[1-turn_] & mask) || (n_stones > n_dead_[1-turn_])) {
+                bool pair = false;
+                if (adj_[cell_id].len_ == 1) {
+                    size_t adj_id = adj_[cell_id].val_[0];
+                    if (adj_[adj_id].len_ == 1) {
+                        pair = true;
+                        Value adj_value = value_[adj_id] * m_;
+                        if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
+                            stone_value = m_ * stones[0];
+                            moves.push_back(Move(cell_id, stone_value));
+                            Value control_req = m_ * (alpha_ - OFFSET[turn_]);
+                            if (adj_value + stones[0] < control_req) {
+                                Value extra = control_req - adj_value;
+                                for (j = 1; j < n_stones && stones[j] < extra; j++) {}
+                                if (j < n_stones) {
+                                    stone_value = m_ * stones[j];
+                                    moves.push_back(Move(cell_id, stone_value));
+                                }
+                            }       
+                        }
+                    }
+                }
+                if (! pair) {
+                    for (j = n_stale_[1 - turn_]; j < n_stones; j++) {
+                        stone_value = m_ * stones[j];
+                        moves.push_back(Move(cell_id, stone_value));
+                    }
+                }
+            }
+        }
+    }
+    if (best_stale != NO_CELL) {
+        stone_value = stones[0] * m_;
+        moves.push_back(Move(best_stale, stone_value));
+    }
+}
+
+
+struct MoveInfo {
+    Move move_;
+    size_t n_adj_;
+
+    MoveInfo(const Move& move, size_t n_adj): move_(move), n_adj_(n_adj) {}
+
+    bool operator < (const MoveInfo& other) const {
+        if (n_adj_ != other.n_adj_)
+            return n_adj_ > other.n_adj_;
+        if (move_.stone_value_ != other.move_.stone_value_)
+            return abs(move_.stone_value_) > abs(other.move_.stone_value_);
+        return move_.cell_ < other.move_.cell_;
+    }
+};
+
+
+size_t Position::solve(long long end_time, size_t& counter) {
+    counter++;
+    if (counter % 1000 == 0 && get_time() > end_time)
+        return TIME_ELAPSED;
+    if (is_winning(RED))
+        return RED;
+    if (is_winning(BLUE))
+        return BLUE;
+    std::vector<Move> moves;
+    get_all_reasonable_moves(moves);
+    std::vector<MoveInfo> move_infos;
+    size_t i;
+    for (i = 0; i < moves.size(); i++) {
+        Move move = moves[i];
+        move_infos.push_back(MoveInfo(move, adj_[move.cell_].len_));
+    }
+    std::sort(move_infos.begin(), move_infos.end());
+    for (i = 0; i < move_infos.size(); i++) {
+        Move move = move_infos[i].move_;
+        make_move(move);
+        size_t result = solve(end_time, counter);
+        unmake_move(move);
+        if (result == TIME_ELAPSED)
+            return TIME_ELAPSED;
+        if (result == turn_)
+            return turn_;
+    }
+    return 1 - turn_;
+}
+
+
+std::pair<size_t, Move> Position::get_optimal_move(long long end_time, size_t& counter, bool break_ties) {
+    std::vector<Move> moves;
+    get_all_reasonable_moves(moves);
+    
+    std::vector<MoveInfo> move_infos;
+    size_t i;
+    Move move;
+    for (i = 0; i < moves.size(); i++) {
+        move = moves[i];
+        move_infos.push_back(MoveInfo(move, adj_[move.cell_].len_));
+    }
+    std::sort(move_infos.begin(), move_infos.end());
+    
+    std::vector<Move> winning_moves;
+    for (i = 0; i < move_infos.size(); i++) {
+        move = move_infos[i].move_;
+        make_move(move);
+        size_t result = solve(end_time, counter);
+        unmake_move(move);
+        if (result == TIME_ELAPSED)
+            return std::pair<size_t, Move>(TIME_ELAPSED, Move());
+        if (result == turn_) {
+            if (break_ties)
+                winning_moves.push_back(move);
+            else
+                return std::pair<size_t, Move>(turn_, move);
+        }
+    }
+    
+    if (winning_moves.size()) {
+        Move best_move;
+        Real best_val = -1000.0;
+        for (i = 0; i < winning_moves.size(); i++) {
+            move = winning_moves[i];
+            make_move(move);
+            Real val = calculate_expectation();
+            unmake_move(move);
+            val *= m_;
+            if (val > best_val) {
+                best_move = move;
+                best_val = val;
+            }
+        }
+        return std::pair<size_t, Move>(turn_, best_move);
+    }
+    return std::pair<size_t, Move>(1 - turn_, moves[0]);
+}
+
+
 bool Position::is_dead(size_t cell_id, size_t p, Value * other_power) {
     Value value = value_[cell_id];
     size_t n_adj = adj_[cell_id].len_;

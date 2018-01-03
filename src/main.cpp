@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     if (strcmp(move_str, "Start"))
         pos.make_move(Move(move_str, pos.turn_));
 	Value alpha = 0;
-    while (true) {
+    while (pos.open_.len_ > 1) {
         fprintf(stderr, "Time left: %.2f seconds\n", (float)time_left / 1e6);
 #ifdef DEBUG_
         assert(n_free == N_MCT_NODES);

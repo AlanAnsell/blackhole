@@ -247,11 +247,11 @@ Move MCTNode::get_most_played_move() {
 }
 
 
-void MCTNode::attempt_solve(Position& pos, HashTable& table) {
+bool MCTNode::attempt_solve(Position& pos, HashTable& table, long long allowed_time, bool break_ties) {
     solve_attempted_ = true;
     long long start_time = get_time();
-    long long end_time = start_time + 100000;
-    std::pair<U32, Move> result = pos.get_optimal_move(end_time, solver_positions_, solver_hash_hits_, false, table);
+    long long end_time = start_time + allowed_time;
+    std::pair<U32, Move> result = pos.get_optimal_move(end_time, solver_positions_, solver_hash_hits_, break_ties, table);
     solver_time_ = get_time() - start_time;
     if (result.first != TIME_ELAPSED) {
         if (result.first == RED)
@@ -261,7 +261,9 @@ void MCTNode::attempt_solve(Position& pos, HashTable& table) {
         solved_ = true;
         fully_explored_ = true;
         solution_ = result.second;
+        return true;
     }
+    return false;
 }
 
 
@@ -375,7 +377,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
 
 
 Move MCTSearch::get_best_move(Position& pos) {
-    if (pos.open_.len_ >= 28) {
+    if (pos.open_.len_ >= 26) {
         std::pair<Real, Move> search_result = pos.get_best_move();
         //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
         return search_result.second;
@@ -394,18 +396,19 @@ Move MCTSearch::get_best_move(Position& pos) {
     long long start_micros = get_time();
     long long time_now = start_micros;
     long long alpha_time = move_time / 3LL;
+    long long solver_time = alpha_time / 2LL;
     fprintf(stderr, "Move time = %lld\n", move_time);
     fprintf(stderr, "Alpha time = %lld\n", alpha_time);
     U32 n_playouts = 0;
     U32 i;
     MCTNode * root;
-    U32 solver_start = 17;
+    U32 solver_start = 19;
     
     while (time_now - start_micros < alpha_time) {
         pos.set_alpha(current_alpha_);
         root = get_or_make_root(current_alpha_, pos);
-        if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
-            root->attempt_solve(pos, table_);
+        if (pos.open_.len_ <= solver_start && ! root->solve_attempted_ && time_now - start_micros < solver_time)
+            root->attempt_solve(pos, table_, solver_time - time_now + start_micros, false);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             root->ucb(pos);
             n_playouts++;
@@ -442,8 +445,8 @@ Move MCTSearch::get_best_move(Position& pos) {
     pos.set_alpha(current_alpha_);
     bool done = false;
     while (time_now - start_micros < move_time) {
-        if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
-            root->attempt_solve(pos, table_);
+        //if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
+        //    root->attempt_solve(pos, table_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
             root->ucb(pos);
             n_playouts++;
@@ -478,8 +481,16 @@ Move MCTSearch::get_best_move(Position& pos) {
         root = select_alpha(pos);
     pos.set_alpha(current_alpha_);
 
-    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts, (double)(time_now - start_micros) / 1e6);
+    if (root->solved_) {
+        long long time_remaining = move_time - (time_now - start_micros);
+        if (time_remaining > 0) {
+            if (root->attempt_solve(pos, table_, time_remaining, true))
+                fprintf(stderr, "Chose most challenging optimal move\n");
+        }
+    }
 
+    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts, (double)(time_now - start_micros) / 1e6);
+        
     if (root->fully_explored_) {
         fprintf(stderr, "Search tree fully explored\n");
         return root->get_highest_value_move(pos);

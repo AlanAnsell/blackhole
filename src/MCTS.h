@@ -49,7 +49,7 @@ public:
 
     bool light_playout(Position& pos, U32& move_count);
 
-    void attempt_solve(Position& pos, HashTable& table);
+    bool attempt_solve(Position& pos, HashTable& table, long long allowed_time, bool break_ties);
 
     Move get_most_played_move();
 

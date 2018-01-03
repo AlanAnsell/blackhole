@@ -678,25 +678,25 @@ U32 Position::solve(long long end_time, U32& counter, U32& hash_hits,
     std::vector<MoveInfo> move_infos;
     U32 i, j;
     U32 op = 1 - turn_;
-    //U64 opp_controls = controls_;
-    //if (turn_ == BLUE)
-    //    opp_controls = ~opp_controls;
+    U64 opp_controls = controls_;
+    if (turn_ == BLUE)
+        opp_controls = ~opp_controls;
     for (i = 0; i < moves.size(); i++) {
         Move move = moves[i];
         U32 cell_id = move.cell_;
-        //U64 mask = MASK(cell_id);
-        int swing = adj_[cell_id].len_;
-        //if (dead_[turn_] & mask)
-        //    swing = -1;
-        //else if (dead_[op] & mask)
+        U64 mask = MASK(cell_id);
+        int swing = 0;
+        if (dead_[turn_] & mask)
+            swing = -1;
+        else if (dead_[op] & mask)
             swing = 1;
-        //List& adj = adj_[cell_id];
-        //for (j = 0; j < adj.len_; j++) {
-        //    U32 adj_id = adj.val_[j];
-        //    U64 adj_mask = MASK(adj_id);
-        //    if ((opp_controls & adj_mask) && ! (dead_[op] & adj_mask))
-        //        swing++;
-        //}
+        List& adj = adj_[cell_id];
+        for (j = 0; j < adj.len_; j++) {
+            U32 adj_id = adj.val_[j];
+            U64 adj_mask = MASK(adj_id);
+            if ((opp_controls & adj_mask) && ! (dead_[op] & adj_mask))
+                swing++;
+        }
         move_infos.push_back(MoveInfo(move, swing));
     }
     std::sort(move_infos.begin(), move_infos.end());
@@ -791,6 +791,7 @@ std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter
     }
     
     if (winning_moves.size()) {
+        fprintf(stderr, "%u optimal moves\n", winning_moves.size());
         Move best_move;
         Real best_val = -1000.0;
         for (i = 0; i < winning_moves.size(); i++) {

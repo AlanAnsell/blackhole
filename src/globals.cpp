@@ -34,34 +34,34 @@ void get_move(char * move_str) {
 }
 
 
-size_t ROW[N_CELLS];
-size_t NUM[N_CELLS];
-CellID ADJ[N_CELLS][MAX_DEGREE];
-size_t N_ADJ[N_CELLS];
-int64 ADJ_MASK[N_CELLS];
+U32 ROW[N_CELLS];
+U32 NUM[N_CELLS];
+U32 ADJ[N_CELLS][MAX_DEGREE];
+U32 N_ADJ[N_CELLS];
+U64 ADJ_MASK[N_CELLS];
 
-CellID row_and_num_to_id(size_t row, size_t num) {
+U32 row_and_num_to_id(U32 row, U32 num) {
     return num + row * (row + 1) / 2;
 }
 
 
-void cell_id_to_name(CellID id, char * name) {
+void cell_id_to_name(U32 id, char * name) {
     name[0] = 'A' + (ROW[id] - NUM[id]);
     name[1] = '1' + NUM[id];
     name[2] = 0;
 }
 
 
-CellID cell_name_to_id(const char * name) {
-    size_t num = name[1] - '1';
-    size_t row = num + (name[0] - 'A');
+U32 cell_name_to_id(const char * name) {
+    U32 num = name[1] - '1';
+    U32 row = num + (name[0] - 'A');
     return row_and_num_to_id(row, num);
 }
 
 
-const int64 debruijn = 0x03f79d71b4cb0a89LL;
+const U64 debruijn = 0x03f79d71b4cb0a89LL;
 
-const size_t index64[64] = {
+const U32 index64[64] = {
     0,  1, 48,  2, 57, 49, 28,  3,
    61, 58, 50, 42, 38, 29, 17,  4,
    62, 55, 59, 36, 53, 51, 43, 22,
@@ -80,8 +80,8 @@ void init() {
     srand(time(NULL));
 #endif
 
-    CellID id = 0;
-    size_t row, num;
+    U32 id = 0;
+    U32 row, num;
     for (row = 0; row < N_ROWS; row++) {
         for (num = 0; num <= row; num++) {
             ROW[id] = row;
@@ -94,13 +94,13 @@ void init() {
         row = ROW[id];
         num = NUM[id];
         if (num < row) {
-            CellID next = row_and_num_to_id(row, num + 1);
+            U32 next = row_and_num_to_id(row, num + 1);
             ADJ[id][N_ADJ[id]++] = next;
             ADJ[next][N_ADJ[next]++] = id;
         }
         if (row < N_ROWS - 1) {
-            CellID left = row_and_num_to_id(row + 1, num);
-            CellID right = row_and_num_to_id(row + 1, num + 1);
+            U32 left = row_and_num_to_id(row + 1, num);
+            U32 right = row_and_num_to_id(row + 1, num + 1);
             ADJ[id][N_ADJ[id]++] = left;
             ADJ[id][N_ADJ[id]++] = right;
             ADJ[left][N_ADJ[left]++] = id;
@@ -110,8 +110,8 @@ void init() {
     
     for (id = 0; id < N_CELLS; id++) {
         ADJ_MASK[id] = 0;
-        for (size_t j = 0; j < N_ADJ[id]; j++)
-            ADJ_MASK[id] |= (1LL << (int64)ADJ[id][j]);
+        for (U32 j = 0; j < N_ADJ[id]; j++)
+            ADJ_MASK[id] |= (1LL << (U64)ADJ[id][j]);
     }
 }
 

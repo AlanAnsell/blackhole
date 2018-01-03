@@ -9,8 +9,8 @@ int main(int argc, char** argv) {
 	init_free_list();
 	
     char cell_str[5];
-    CellID blocked[N_BLOCKED_CELLS];
-    for (size_t i = 0; i < N_BLOCKED_CELLS; i++) {
+    U32 blocked[N_BLOCKED_CELLS];
+    for (U32 i = 0; i < N_BLOCKED_CELLS; i++) {
         assert(scanf("%s", cell_str));
         blocked[i] = cell_name_to_id(cell_str);
     }

@@ -13,23 +13,23 @@ public:
 
     Value alpha_;
     Real val_;
-    size_t n_red_wins_;
-    size_t n_playouts_;
+    U32 n_red_wins_;
+    U32 n_playouts_;
 
     bool fully_explored_;
     bool expanded_;
 
-    size_t n_children_fully_explored_;
-    size_t n_children_;
-    size_t n_child_moves_;
+    U32 n_children_fully_explored_;
+    U32 n_children_;
+    U32 n_child_moves_;
     std::vector<Move> child_moves_;
     std::vector<MCTNode*> children_;
     
     bool solved_;
     bool solve_attempted_;
     Move solution_;
-    size_t solver_positions_;
-    size_t solver_hash_hits_;
+    U32 solver_positions_;
+    U32 solver_hash_hits_;
     long long solver_time_;
 
     AMAFTable amaf_[2];
@@ -47,7 +47,7 @@ public:
 
     MCTNode * expand(Position& pos, AMAFTable& amaf);
 
-    bool light_playout(Position& pos, size_t& move_count);
+    bool light_playout(Position& pos, U32& move_count);
 
     void attempt_solve(Position& pos, HashTable& table);
 
@@ -64,7 +64,7 @@ public:
 
 extern MCTNode node_store[N_MCT_NODES];
 extern MCTNode * free_list[N_MCT_NODES];
-extern size_t n_free;
+extern U32 n_free;
 
 MCTNode * get_free();
 

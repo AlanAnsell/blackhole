@@ -25,13 +25,12 @@
 #define NO_CELL 400
 #define TIME_ELAPSED 2
 
-#define MASK(x) (1LL << (int64)(x))
+#define MASK(x) (1LL << (U64)(x))
 
 typedef int Value;
-typedef size_t CellID;
+typedef unsigned int U32;
+typedef unsigned long long U64;
 typedef double Real;
-typedef int Bitmask;
-typedef unsigned long long int64;
 
 extern const char * ENGINE_NAME;
 extern const char * VERSION_NUMBER;
@@ -49,23 +48,23 @@ void send_move(char * move_str);
 
 void get_move(char * move_str);
 
-extern size_t ROW[N_CELLS];
-extern size_t NUM[N_CELLS];
-extern CellID ADJ[N_CELLS][MAX_DEGREE];
-extern size_t N_ADJ[N_CELLS];
-extern int64 ADJ_MASK[N_CELLS];
+extern U32 ROW[N_CELLS];
+extern U32 NUM[N_CELLS];
+extern U32 ADJ[N_CELLS][MAX_DEGREE];
+extern U32 N_ADJ[N_CELLS];
+extern U64 ADJ_MASK[N_CELLS];
 
-extern const int64 debruijn;
-extern const size_t index64[64];
+extern const U64 debruijn;
+extern const U32 index64[64];
 #define LSB(x) ((x) & -(x))
 #define INDEX(x) (index64[((x) * debruijn) >> 58])
 
 
-CellID row_and_num_to_id(size_t row, size_t num);
+U32 row_and_num_to_id(U32 row, U32 num);
 
-void cell_id_to_name(CellID id, char * name);
+void cell_id_to_name(U32 id, char * name);
 
-CellID cell_name_to_id(const char * name);
+U32 cell_name_to_id(const char * name);
 
 void init();
 

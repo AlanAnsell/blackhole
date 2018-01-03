@@ -2,7 +2,7 @@
 
 
 void MCTNode::dispose() {
-    for (size_t i = 0; i < children_.size(); i++) {
+    for (U32 i = 0; i < children_.size(); i++) {
         children_[i]->dispose();
         put_free(children_[i]);
     }
@@ -46,7 +46,7 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
 MCTNode * MCTNode::select(Position& pos, AMAFTable& amaf) {
     MCTNode * best_node = NULL;
     Real best_node_value = -1000.0, child_val;
-    size_t i;
+    U32 i;
     for (i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (! child->fully_explored_) {
@@ -67,8 +67,8 @@ MCTNode * MCTNode::select(Position& pos, AMAFTable& amaf) {
     Real best_move_value = -1000.0;
     for (i = 0; i < n_child_moves_; i++) {
         Move& move = child_moves_[i];
-        std::pair<size_t, size_t> indices = pos.get_cell_and_stone_indices(move);
-        size_t n_amaf_playouts = amaf.get_n_playouts(indices.first, indices.second); 
+        std::pair<U32, U32> indices = pos.get_cell_and_stone_indices(move);
+        U32 n_amaf_playouts = amaf.get_n_playouts(indices.first, indices.second); 
         if (n_amaf_playouts > 0)
             child_val = amaf.get_value(indices.first, indices.second);
         else
@@ -119,9 +119,9 @@ MCTNode * MCTNode::expand(Position& pos, AMAFTable& amaf) {
 }
 
 
-std::pair<size_t, size_t> simulation[N_CELLS];
+std::pair<U32, U32> simulation[N_CELLS];
 
-bool MCTNode::light_playout(Position& pos, size_t& move_count) {
+bool MCTNode::light_playout(Position& pos, U32& move_count) {
     bool result = true;
     bool result_found = false;
     pos.take_snapshot();
@@ -153,8 +153,8 @@ void MCTNode::ucb(Position& pos) {
     assert(! fully_explored_);
 #endif
     MCTNode * search_root = this;
-    size_t orig_turn = pos.turn_;
-    size_t move_count = 0, i;
+    U32 orig_turn = pos.turn_;
+    U32 move_count = 0, i;
     while (search_root->expanded_) {
         search_root = search_root->select(pos, amaf_[pos.turn_]);
 #ifdef DEBUG_
@@ -171,14 +171,14 @@ void MCTNode::ucb(Position& pos) {
         move_count++;
         pos.make_move(search_root->move_);
     }
-    size_t result;
+    U32 result;
     if (search_root->fully_explored_)
         result = (search_root->val_ == 1.0);
     else
         result = search_root->light_playout(pos, move_count);
 
     for (i = 0; i < move_count; i++) {
-        size_t turn = (orig_turn + i) % 2;
+        U32 turn = (orig_turn + i) % 2;
         amaf_[turn].update(simulation[i].first, simulation[i].second, result != turn);
     }
 
@@ -217,8 +217,8 @@ Move MCTNode::get_highest_value_move(Position& pos) {
         return solution_;
     Move best_move;
     Real best_val = -1000.0;
-    size_t n_playouts = 0;
-    for (size_t i = 0; i < children_.size(); i++) {
+    U32 n_playouts = 0;
+    for (U32 i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if ((! fully_explored_ || child->fully_explored_) &&
                 child->val_ * pos.m_ > best_val) {
@@ -234,8 +234,8 @@ Move MCTNode::get_highest_value_move(Position& pos) {
 
 Move MCTNode::get_most_played_move() {
     Move best_move;
-    size_t most_visits = 0;
-    for (size_t i = 0; i < children_.size(); i++) {
+    U32 most_visits = 0;
+    for (U32 i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (child->n_playouts_ > most_visits) {
             best_move = child->move_;
@@ -251,7 +251,7 @@ void MCTNode::attempt_solve(Position& pos, HashTable& table) {
     solve_attempted_ = true;
     long long start_time = get_time();
     long long end_time = start_time + 100000;
-    std::pair<size_t, Move> result = pos.get_optimal_move(end_time, solver_positions_, solver_hash_hits_, false, table);
+    std::pair<U32, Move> result = pos.get_optimal_move(end_time, solver_positions_, solver_hash_hits_, false, table);
     solver_time_ = get_time() - start_time;
     if (result.first != TIME_ELAPSED) {
         if (result.first == RED)
@@ -290,7 +290,7 @@ void MCTNode::print(FILE * f) {
 
 MCTNode node_store[N_MCT_NODES];
 MCTNode * free_list[N_MCT_NODES];
-size_t n_free;
+U32 n_free;
 
 
 MCTNode * get_free() {
@@ -307,7 +307,7 @@ void put_free(MCTNode * node) {
 
 
 void init_free_list() {
-    for (size_t i = 0; i < N_MCT_NODES; i++)
+    for (U32 i = 0; i < N_MCT_NODES; i++)
         free_list[i] = &node_store[i];
     n_free = N_MCT_NODES;
 }
@@ -315,13 +315,13 @@ void init_free_list() {
 
 MCTSearch::MCTSearch(const Position& pos, Value alpha) {
     current_alpha_ = alpha;
-    for (size_t i = 0; i < 2 * MAX_RESULT + 1; i++)
+    for (U32 i = 0; i < 2 * MAX_RESULT + 1; i++)
         roots_[i] = NULL;
 }
 
 
 MCTSearch::~MCTSearch() {
-    for (size_t i = 0; i < 2 * MAX_RESULT + 1; i++) {
+    for (U32 i = 0; i < 2 * MAX_RESULT + 1; i++) {
         if (roots_[i] != NULL) {
             roots_[i]->dispose();
             put_free(roots_[i]);
@@ -396,10 +396,10 @@ Move MCTSearch::get_best_move(Position& pos) {
     long long alpha_time = move_time / 3LL;
     fprintf(stderr, "Move time = %lld\n", move_time);
     fprintf(stderr, "Alpha time = %lld\n", alpha_time);
-    size_t n_playouts = 0;
-    size_t i;
+    U32 n_playouts = 0;
+    U32 i;
     MCTNode * root;
-    size_t solver_start = 17;
+    U32 solver_start = 17;
     
     while (time_now - start_micros < alpha_time) {
         pos.set_alpha(current_alpha_);

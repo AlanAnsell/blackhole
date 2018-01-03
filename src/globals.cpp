@@ -116,7 +116,7 @@ void init() {
 }
 
 
-const Real UCB_C = 1.6;
+const Real UCB_C = 1.2;
 
 Real sigmoid(Real x) {
     return 1.0 / (1.0 + exp(-x));

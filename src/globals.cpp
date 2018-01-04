@@ -6,8 +6,13 @@ const char * VERSION_NUMBER = "2.4.1";
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
 
+#ifdef FAST_
+long long time_limit = 2000000;
+long long time_left = 1950000;
+#else
 long long time_limit = 4900000;
 long long time_left = time_limit;
+#endif
 long long time_started, time_ended;
 
 long long get_time() {

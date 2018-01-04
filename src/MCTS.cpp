@@ -409,7 +409,7 @@ Move MCTSearch::get_best_move(Position& pos) {
         use_proportion = 0.5;
     else {
         fprintf(stderr, "Expecting to make %d more moves before position solved\n", moves_left);
-        use_proportion = 1.0 - pow(5e5 / time_left_r, 1.0 / (Real)moves_left);
+        use_proportion = 1.0 - pow(((Real)time_limit / 10.0)  / time_left_r, 1.0 / (Real)moves_left);
     }
     long long move_time = (long long)(use_proportion * time_left_r);
     long long start_micros = get_time();

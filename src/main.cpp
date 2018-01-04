@@ -5,6 +5,13 @@
 
 int main(int argc, char** argv) {
     time_started = get_time();
+    if (argc > 1) {
+        int millis;
+        if (sscanf(argv[1], "-t=%d", &millis) == 1) {
+            time_limit = 1000LL * (long long)millis;
+            time_left = (49 * time_limit) / 50;
+        }
+    }
 	init();
 	init_free_list();
 	
@@ -63,3 +70,4 @@ int main(int argc, char** argv) {
 // EventHorizon2_4_3: add hash table to endgame solver, adjust time management
 // EventHorizon2_4_6: adjust UCB coefficient
 // EventHorizon3_0_0: generate only selected moves during expansion phase. Be more optimistic in target selection. 
+// EventHorizon3_0_1: time usage

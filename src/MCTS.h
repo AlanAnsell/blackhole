@@ -20,11 +20,11 @@ public:
     bool expanded_;
 
     U32 n_children_fully_explored_;
-    U32 n_children_;
     U32 n_child_moves_;
+    U32 generator_stone_index_;
     std::vector<Move> child_moves_;
     std::vector<MCTNode*> children_;
-    
+     
     bool solved_;
     bool solve_attempted_;
     Move solution_;
@@ -41,9 +41,13 @@ public:
     
     MCTNode * select(Position& pos, AMAFTable& amaf);
 
-    MCTNode *  add_child(Position& pos, const Move& move);
+    MCTNode * add_child(Position& pos, const Move& move);
+
+    bool is_now_fully_explored();
 
     void get_children(Position& pos);
+
+    void generate_batch(Position& pos);
 
     MCTNode * expand(Position& pos, AMAFTable& amaf);
 

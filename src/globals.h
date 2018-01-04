@@ -54,6 +54,8 @@ extern U32 ADJ[N_CELLS][MAX_DEGREE];
 extern U32 N_ADJ[N_CELLS];
 extern U64 ADJ_MASK[N_CELLS];
 
+extern Value STONE_POWER[2][1 << N_STONES][MAX_DEGREE+1];
+
 extern const U64 debruijn;
 extern const U32 index64[64];
 #define LSB(x) ((x) & -(x))

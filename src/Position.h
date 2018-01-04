@@ -77,7 +77,9 @@ struct Snapshot {
     Value value_[N_CELLS];
 
     Value stones_[2][N_STONES];
+	U32 stone_masks_[2];
     U32 n_stones_[2];
+    Value * power_[2];
     U32 turn_;
 
     U64 controls_;
@@ -161,9 +163,12 @@ public:
     Value value_[N_CELLS];
 
 	Value stones_[2][N_STONES];
-	U32 stone_loc_[2][N_STONES+1];
+	U32 stone_masks_[2];
+    U32 stone_loc_[2][N_STONES+1];
     U32 n_stones_[2];
-	U32 turn_;
+	Value * power_[2];
+    
+    U32 turn_;
     int m_;
 
     Value alpha_;
@@ -189,8 +194,6 @@ public:
     
 	void unmake_move(const Move& move);
 
-    void get_stone_power(U32 p, Value * power);
-
     Move get_random_move();
 
     Move get_default_policy_move();
@@ -215,13 +218,15 @@ public:
 
     void get_all_reasonable_moves(std::vector<Move>& moves);
 
+    void get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<Move>& moves);
+
     U32 solve(long long end_time, U32& counter, U32& hash_hits,
             HashTable& table, HashInfo& hash_info, U64 stone_masks[2]);
 
     std::pair<U32, Move> get_optimal_move(
             long long end_time, U32& counter, U32& hash_hits, bool break_ties, HashTable& table);
 
-    bool is_dead(U32 cell_id, U32 p, Value * other_power);
+    bool is_dead(U32 cell_id, U32 p);
 
     bool all_adj_dead(U32 cell_id);
 

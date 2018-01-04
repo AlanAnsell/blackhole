@@ -29,6 +29,7 @@ int main(int argc, char** argv) {
         MCTSearch search(pos, alpha);
         Move move = search.get_best_move(pos);
         alpha = search.current_alpha_;
+        fprintf(stderr, "Used %u nodes\n", N_MCT_NODES - n_free);
 		pos.make_move(move);
         move.to_str(move_str);
 		send_move(move_str);
@@ -61,3 +62,4 @@ int main(int argc, char** argv) {
 // EventHorizon2_3_0: implement endgame solver
 // EventHorizon2_4_3: add hash table to endgame solver, adjust time management
 // EventHorizon2_4_6: adjust UCB coefficient
+// EventHorizon3_0_0: generate only selected moves during expansion phase. Be more optimistic in target selection. 

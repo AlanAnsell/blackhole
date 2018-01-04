@@ -50,6 +50,8 @@ Position::Position(U32 blocked[N_BLOCKED_CELLS], Value alpha): turn_(RED), m_(pa
 
     for (U32 p = 0; p < 2; p++) {
         n_stones_[p] = N_STONES;
+        stone_masks_[p] = (1 << N_STONES) - 1;
+        power_[p] = STONE_POWER[p][stone_masks_[p]];
         for (i = 0; i < N_STONES; i++) {
             stones_[p][i] = i + 1;
             stone_loc_[p][i+1] = i;
@@ -93,6 +95,8 @@ void Position::make_move(const Move& move) {
         stones[i] = stones[i+1];
         stone_loc[stones[i]] = i;
     }
+    stone_masks_[turn_] ^= (1 << (stone_number - 1));
+    power_[turn_] = STONE_POWER[turn_][stone_masks_[turn_]];
     turn_ ^= 1;
     m_ *= -1;
 
@@ -116,7 +120,7 @@ void Position::make_move(const Move& move) {
     List& adj = adj_[cell_id];
     for (i = 0; i < adj.len_; i++) {
         U32 adj_id = adj.val_[i];
-        U64 adj_mask = (1LL << (U64)adj_id);
+        U64 adj_mask = MASK(adj_id);
         bool new_control = (value_[adj_id] < alpha_);
         bool old_control = (controls_ & adj_mask);
         if (new_control != old_control) {
@@ -125,17 +129,15 @@ void Position::make_move(const Move& move) {
             controls_ ^= adj_mask;
         }
     }
-    Value power[2][MAX_DEGREE+1];
-    get_stone_power(RED, power[0]);
-    get_stone_power(BLUE, power[1]);
+    
     for (i = 0; i < open_.len_; i++) {
         U32 open_id = open_.val_[i];
-        U64 open_mask = (1LL << (U64)open_id);
+        U64 open_mask = MASK(open_id);
         if (! (dead_[RED] & open_mask) && ! (dead_[BLUE] & open_mask)) {
-            if (is_dead(open_id, RED, power[BLUE])) {
+            if (is_dead(open_id, RED)) {
                 n_dead_[RED]++;
                 dead_[RED] |= open_mask;
-            } else if (is_dead(open_id, BLUE, power[RED])) {
+            } else if (is_dead(open_id, BLUE)) {
                 n_dead_[BLUE]++;
                 dead_[BLUE] |= open_mask;
             }
@@ -176,9 +178,11 @@ void Position::unmake_move(const Move& move) {
         stone_loc[stones[i]] = i;
     }
     stones[i] = stone_number;
+    stone_masks_[turn_] |= (1 << (stone_number - 1));
+    power_[turn_] = STONE_POWER[turn_][stone_masks_[turn_]];
     n_stones++;
    
-    U64 cell_mask = (1LL << (U64)cell_id);
+    U64 cell_mask = MASK(cell_id);
     open_mask_ |= cell_mask;
     open_.readd(cell_id); 
     
@@ -197,7 +201,7 @@ void Position::unmake_move(const Move& move) {
     List& adj = adj_[cell_id];
     for (i = 0; i < adj.len_; i++) {
         U32 adj_id = adj.val_[i];
-        U64 adj_mask = (1LL << (U64)adj_id);
+        U64 adj_mask = MASK(adj_id);
         bool new_control = (value_[adj_id] < alpha_);
         bool old_control = (controls_ & adj_mask);
         if (new_control != old_control) {
@@ -207,19 +211,16 @@ void Position::unmake_move(const Move& move) {
         }
     }
     
-    Value power[2][MAX_DEGREE+1];
-    get_stone_power(RED, power[0]);
-    get_stone_power(BLUE, power[1]);
     for (i = 0; i < open_.len_; i++) {
         U32 open_id = open_.val_[i];
-        U64 open_mask = (1LL << (U64)open_id);
+        U64 open_mask = MASK(open_id);
         if ((dead_[RED] & open_mask)) {
-            if (! is_dead(open_id, RED, power[BLUE])) {
+            if (! is_dead(open_id, RED)) {
                 n_dead_[RED]--;
                 dead_[RED] ^= open_mask;
             }
         } else if ((dead_[BLUE] & open_mask)) {
-            if (! is_dead(open_id, BLUE, power[RED])) {
+            if (! is_dead(open_id, BLUE)) {
                 n_dead_[BLUE]--;
                 dead_[BLUE] ^= open_mask;
             }
@@ -258,20 +259,6 @@ void Position::unmake_move(const Move& move) {
     assert(n_stale_[RED] <= n_dead_[RED]);
     assert(n_stale_[BLUE] <= n_dead_[BLUE]);
 #endif
-}
-
-
-void Position::get_stone_power(U32 p, Value * power) {
-    U32 op = 1 - p;
-    U32 n_stones = n_stones_[p];
-    Value * stones = stones_[p];
-    power[0] = 0;
-    U32 i;
-    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++)
-        power[i] = power[i-1] + stones[n_stones-i] * parity[p];
-    U32 max_our_stones = i;
-    for (i = 0; i < n_stones_[op] && i + max_our_stones <= MAX_DEGREE; i++)
-        power[i + max_our_stones] = power[i + max_our_stones - 1] + stones_[op][i] * parity[op];
 }
 
 
@@ -401,8 +388,6 @@ Real Position::calculate_win_prob(Value alpha) const {
     for (i = 0; i < 2; i++)
         for (j = 0; j < n_stones_[i]; j++)
             stone_list[n_stones++] = stones_[i][j] * parity[i];
-    //for (i = 0; i < n_stones; i++)
-    //    fprintf(stderr, "%d\n", stone_list[i]);
     memset(ways, 0, sizeof(ways));
     for (i = 0; i <= n_stones; i++)
         ways[0][i][MAX_RESULT] = 1;
@@ -417,23 +402,9 @@ Real Position::calculate_win_prob(Value alpha) const {
             }
         }
     }
-    //fprintf(stderr, "n_stones = %u\n", n_stones);
     combos[0] = 1;
-    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++) {
+    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++)
         combos[i] = combos[i-1] * (n_stones + 1 - i) / i;
-#ifdef DEBUG_
-        U32 n_ways = 0;
-        for (j = 0; j <= 2 * MAX_RESULT; j++) {
-            //fprintf(stderr, "%u: %u\n", j, ways[i][2][j]);
-            n_ways += ways[i][n_stones][j];
-        }
-        if (n_ways != combos[i]) {
-            fprintf(stderr, "n_ways = %u, n_combos = %u\n", n_ways, combos[i]);
-            fflush(stderr);
-        }
-        assert(n_ways == combos[i]);
-#endif
-    }
     Real prob_sum = 0.0;
     for (i = 0; i < open_.len_; i++) {
         U32 cell_id = open_.val_[i];
@@ -636,6 +607,62 @@ void Position::get_all_reasonable_moves(std::vector<Move>& moves) {
 }
 
 
+void Position::get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<Move>& moves) {
+    Value stone_number = stones_[turn_][stone_index];
+    Value prev_stone_number;
+    if (stone_index == 0)
+        prev_stone_number = 0;
+    else
+        prev_stone_number = stones_[turn_][stone_index - 1];
+    Value stone_value = m_ * stone_number;
+    Value best_stale_val = 1000;
+    U32 best_stale = NO_CELL;
+    U32 n_stones = n_stones_[turn_];
+    U32 op = 1 - turn_;
+    U64 we_control = controls_;
+    if (turn_ == RED)
+        we_control = ~we_control;
+    for (U32 i = 0; i < open_.len_; i++) {
+        U32 cell_id = open_.val_[i];
+        Value cell_value = value_[cell_id] * m_;
+        U64 mask = MASK(cell_id);
+        if ((stale_[RED] & mask) || (stale_[BLUE] & mask)) {
+            if (stone_index == 0 && cell_value < best_stale_val) {
+                best_stale = cell_id;
+                best_stale_val = cell_value;
+            }
+        } else {
+            if ((dead_[op] & mask) || (n_stones > n_dead_[op])) {
+                bool done = false;
+                if (adj_[cell_id].len_ == 1) {
+                    U32 adj_id = adj_[cell_id].val_[0];
+                    if (adj_[adj_id].len_ == 1) {
+                        done = true;
+                        Value adj_value = value_[adj_id] * m_;
+                        if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
+                            if (stone_index == 0)
+                                moves.push_back(Move(cell_id, stone_value));
+                            else {
+                                Value extra_req = m_ * (alpha_ - OFFSET[turn_]) - adj_value;
+                                if (stone_number >= extra_req && prev_stone_number < extra_req)
+                                    moves.push_back(Move(cell_id, stone_value));
+                            }       
+                        }
+                    } else {
+                        if (we_control & mask)
+                            done = true;
+                    }
+                }
+                if (! done && stone_index >= n_stale_[op])
+                    moves.push_back(Move(cell_id, stone_value));
+            }
+        }
+    }
+    if (best_stale != NO_CELL)
+        moves.push_back(Move(best_stale, stone_value));
+}
+
+
 struct MoveInfo {
     Move move_;
     int swing_;
@@ -643,10 +670,6 @@ struct MoveInfo {
     MoveInfo(const Move& move, int swing): move_(move), swing_(swing) {}
 
     bool operator < (const MoveInfo& other) const {
-        //if (stale_ != other.stale_)
-        //    return stale_;
-        //if (dead_ != other.dead_)
-        //    return ! dead_;
         if (move_.stone_value_ != other.move_.stone_value_)
             return abs(move_.stone_value_) > abs(other.move_.stone_value_);
         if (swing_ != other.swing_)
@@ -791,7 +814,7 @@ std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter
     }
     
     if (winning_moves.size()) {
-        fprintf(stderr, "%u optimal moves\n", winning_moves.size());
+        fprintf(stderr, "%u optimal moves\n", (U32)winning_moves.size());
         Move best_move;
         Real best_val = -1000.0;
         for (i = 0; i < winning_moves.size(); i++) {
@@ -811,7 +834,8 @@ std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter
 }
 
 
-bool Position::is_dead(U32 cell_id, U32 p, Value * other_power) {
+bool Position::is_dead(U32 cell_id, U32 p) {
+    Value * other_power = power_[1 - p];
     Value value = value_[cell_id];
     U32 n_adj = adj_[cell_id].len_;
     Value worst_val = parity[p] * (value + other_power[n_adj]);
@@ -823,7 +847,7 @@ bool Position::all_adj_dead(U32 cell_id) {
     List& adj = adj_[cell_id];
     U32 n_adj = adj.len_;
     for (U32 i = 0; i < n_adj; i++) {
-        U64 adj_mask = (1LL << (U64)adj.val_[i]);
+        U64 adj_mask = MASK(adj.val_[i]);
         if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
             return false;
     }
@@ -864,29 +888,26 @@ void Position::set_alpha(Value alpha) {
     n_controls_[0] = n_controls_[1] = 0;
     n_dead_[0] = n_dead_[1] = 0;
     controls_ = 0;
-    Value power[2][MAX_DEGREE+1];
     dead_[0] = dead_[1] = 0;
     stale_[RED] = stale_[BLUE] = 0;
     n_stale_[RED] = n_stale_[BLUE] = 0;
-    get_stone_power(RED, power[0]);
-    get_stone_power(BLUE, power[1]);
     U32 i, cell_id, n_adj;
     U64 mask;
     for (i = 0; i < open_.len_; i++) {
         cell_id = open_.val_[i];
         Value value = value_[cell_id];
         n_adj = adj_[cell_id].len_;
-        mask = (1LL << (U64)cell_id);
+        mask = MASK(cell_id);
         if (value >= alpha_) {
             n_controls_[RED]++;
-            if (value + power[BLUE][n_adj] >= alpha_) {
+            if (value + power_[BLUE][n_adj] >= alpha_) {
                 n_dead_[RED]++;
                 dead_[RED] |= mask;
             }
         } else {
             controls_ |= mask;
             n_controls_[BLUE]++;
-            if (value + power[RED][n_adj] < alpha_) {
+            if (value + power_[RED][n_adj] < alpha_) {
                 n_dead_[BLUE]++;
                 dead_[BLUE] |= mask;
             }
@@ -922,6 +943,8 @@ void Position::take_snapshot() {
     for (p = 0; p < 2; p++) {
         U32 n_stones = n_stones_[p];
         snapshot_.n_stones_[p] = n_stones;
+        snapshot_.stone_masks_[p] = stone_masks_[p];
+        snapshot_.power_[p] = power_[p];
         Value * stones = stones_[p];
         Value * snapshot_stones = snapshot_.stones_[p];
         for (i = 0; i < n_stones; i++)
@@ -962,6 +985,8 @@ void Position::restore_snapshot() {
     for (p = 0; p < 2; p++) {
         U32 n_stones = snapshot_.n_stones_[p];
         n_stones_[p] = n_stones;
+        stone_masks_[p] = snapshot_.stone_masks_[p];
+        power_[p] = snapshot_.power_[p];
         Value * stones = stones_[p];
         U32 * stone_loc = stone_loc_[p];
         Value * snapshot_stones = snapshot_.stones_[p];

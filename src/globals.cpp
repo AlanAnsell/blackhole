@@ -40,6 +40,8 @@ U32 ADJ[N_CELLS][MAX_DEGREE];
 U32 N_ADJ[N_CELLS];
 U64 ADJ_MASK[N_CELLS];
 
+Value STONE_POWER[2][1 << N_STONES][MAX_DEGREE+1];
+
 U32 row_and_num_to_id(U32 row, U32 num) {
     return num + row * (row + 1) / 2;
 }
@@ -113,6 +115,22 @@ void init() {
         for (U32 j = 0; j < N_ADJ[id]; j++)
             ADJ_MASK[id] |= (1LL << (U64)ADJ[id][j]);
     }
+
+    for (U32 p = 0; p < 2; p++) {
+        Value m = parity[p];
+        for (U32 mask = 0; mask < (1 << N_STONES); mask++) {
+            Value * power = STONE_POWER[p][mask];
+            power[0] = 0;
+            U32 i = 1;
+            for (int j = N_STONES - 1; j >= 0; j--) {
+                if (mask & (1 << j)) {
+                    power[i] = power[i - 1] + m * (j + 1);
+                    i++;
+                }
+            }
+        }
+    }
+
 }
 
 

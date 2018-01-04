@@ -28,7 +28,7 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
     child_moves_.clear();
     children_.clear();
     expanded_ = false;
-    n_children_ = 0;
+    generator_stone_index_ = pos.n_stones_[pos.turn_];
     n_child_moves_ = 0;
     n_children_fully_explored_ = 0;
     solved_ = false;
@@ -87,6 +87,8 @@ MCTNode * MCTNode::select(Position& pos, AMAFTable& amaf) {
         n_child_moves_--;
         Move best_move = child_moves_[best_move_index];
         child_moves_[best_move_index] = child_moves_[n_child_moves_];
+        if (n_child_moves_ == 0)
+            generate_batch(pos);
         return add_child(pos, best_move);
     }
 #ifdef DEBUG_
@@ -106,15 +108,32 @@ MCTNode *  MCTNode::add_child(Position& pos, const Move& move) {
 }
 
 
-void MCTNode::get_children(Position& pos) {
-    pos.get_all_reasonable_moves(child_moves_);
-    n_child_moves_ = n_children_ = child_moves_.size();
+bool MCTNode::is_now_fully_explored() {
+    return generator_stone_index_ == 0 &&
+            n_child_moves_ == 0 &&
+            n_children_fully_explored_ == children_.size();
 }
 
 
+void MCTNode::get_children(Position& pos) {
+    pos.get_all_reasonable_moves(child_moves_);
+    n_child_moves_ = child_moves_.size();
+}
+
+
+void MCTNode::generate_batch(Position& pos) {
+    child_moves_.clear();
+    while (child_moves_.size() == 0 && generator_stone_index_ > 0) {
+        generator_stone_index_--;
+        pos.get_all_reasonable_moves_with_stone(generator_stone_index_, child_moves_);
+    }
+    n_child_moves_ = child_moves_.size();
+}
+    
+
 MCTNode * MCTNode::expand(Position& pos, AMAFTable& amaf) {
     expanded_ = true;
-    get_children(pos);
+    generate_batch(pos);
     return select(pos, amaf);
 }
 
@@ -200,7 +219,7 @@ void MCTNode::ucb(Position& pos) {
             pos.unmake_move(search_root->move_);
             if (search_root->fully_explored_) {
                 parent->n_children_fully_explored_++;
-                if ((parent->n_children_fully_explored_ == parent->n_children_) ||
+                if ((parent->is_now_fully_explored()) ||
                         (pos.turn_ == RED && search_root->val_ == 1.0) ||
                         (pos.turn_ == BLUE && search_root->val_ == 0.0)) {
                     parent->fully_explored_ = true;
@@ -354,7 +373,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
             test_root = roots_[alpha + MAX_RESULT];
             if (test_root != NULL) {
                 test_root->print(stderr);
-                if (test_root->val_ >= 0.5 || root == NULL) {
+                if (test_root->val_ >= 0.4 || root == NULL) {
                     current_alpha_ = alpha;
                     root = test_root;
                 }
@@ -365,7 +384,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
             test_root = roots_[alpha + MAX_RESULT];
             if (test_root != NULL) {
                 test_root->print(stderr);
-                if (test_root->val_ < 0.5 || root == NULL) {
+                if (test_root->val_ < 0.6 || root == NULL) {
                     current_alpha_ = alpha;
                     root = test_root;
                 }
@@ -427,13 +446,18 @@ Move MCTSearch::get_best_move(Position& pos) {
                 break;
             }
         } else {
-            if (root->val_ >= 0.5) {
-                if (current_alpha_ < MAX_RESULT)
-                    current_alpha_++;
+            Real increment_thresh, decrement_thresh;
+            if (pos.turn_ == RED) {
+                increment_thresh = 0.45;
+                decrement_thresh = 0.35;
             } else {
-                if (current_alpha_ > MIN_RESULT)
-                    current_alpha_--;
+                increment_thresh = 0.65;
+                decrement_thresh = 0.55;
             }
+            if (root->val_ >= increment_thresh && current_alpha_ < MAX_RESULT)
+                current_alpha_++;
+            if (root->val_ <= decrement_thresh && current_alpha_ > MIN_RESULT)
+                current_alpha_--;
         }
         time_now = get_time();
     }

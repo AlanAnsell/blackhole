@@ -8,7 +8,7 @@ Value OFFSET[2] = {0, 1};
 
 #ifdef FAST_
 long long time_limit = 2000000;
-long long time_left = 1950000;
+long long time_left = 1900000;
 #else
 long long time_limit = 4900000;
 long long time_left = time_limit;
@@ -139,7 +139,7 @@ void init() {
 }
 
 
-const Real UCB_C = 1.2;
+const Real UCB_C = 0.8;
 
 Real sigmoid(Real x) {
     return 1.0 / (1.0 + exp(-x));

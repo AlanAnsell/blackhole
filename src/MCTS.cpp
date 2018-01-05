@@ -396,7 +396,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
 
 
 Move MCTSearch::get_best_move(Position& pos) {
-    if (pos.open_.len_ >= 26) {
+    if (pos.open_.len_ >= 28) {
         std::pair<Real, Move> search_result = pos.get_best_move();
         //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
         return search_result.second;

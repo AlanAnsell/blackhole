@@ -72,4 +72,5 @@ int main(int argc, char** argv) {
 // EventHorizon3_0_0: generate only selected moves during expansion phase. Be more optimistic in target selection. 
 // EventHorizon3_0_1: time usage
 // EventHorizon3_0_2: tune UCB_C
+// EventHorizon3_0_3: make opening heuristic calculation more efficient and more optimistic
 

@@ -200,7 +200,9 @@ public:
 
     Move get_expectation_maximising_move();
 
-	Real calculate_win_prob(Value alpha) const;
+    void find_n_ways(U32 stone_index) const;
+
+	Real calculate_win_prob(Value alpha, U32 stone_index) const;
   
     std::pair<Real, Move> get_best_alpha_move(Value alpha);
 

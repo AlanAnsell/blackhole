@@ -378,42 +378,47 @@ Move Position::get_expectation_maximising_move() {
 }
 
 
-U32 ways[MAX_DEGREE + 1][2 * N_STONES + 1][2 * MAX_RESULT + 1];
+U32 ways[N_STONES][MAX_DEGREE + 1][2 * N_STONES + 1][2 * MAX_RESULT + 1];
 U32 combos[MAX_DEGREE + 1];
 Value stone_list[2 * N_STONES];
 
-Real Position::calculate_win_prob(Value alpha) const {
+
+void Position::find_n_ways(U32 stone_index) const {
     U32 i, j, n_stones = 0;
     Value k;
     for (i = 0; i < 2; i++)
         for (j = 0; j < n_stones_[i]; j++)
-            stone_list[n_stones++] = stones_[i][j] * parity[i];
-    memset(ways, 0, sizeof(ways));
+            if (! (i == turn_ && j == stone_index))
+                stone_list[n_stones++] = stones_[i][j] * parity[i];
+    U32 (*dp)[2*N_STONES+1][2*MAX_RESULT+1] = ways[stone_index];
     for (i = 0; i <= n_stones; i++)
-        ways[0][i][MAX_RESULT] = 1;
+        dp[0][i][MAX_RESULT] = 1;
     for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++) {
         for (j = 1; j <= n_stones; j++) {
             Value val = stone_list[j-1];
             for (k = 0; k <= 2 * MAX_RESULT; k++) {
-                U32& ans = ways[i][j][k];
-                ans = ways[i][j-1][k];
+                U32& ans = dp[i][j][k];
+                ans = dp[i][j-1][k];
                 if (k - val >= 0 && k - val <= 2 * MAX_RESULT)
-                    ans += ways[i-1][j-1][k-val];
+                    ans += dp[i-1][j-1][k-val];
             }
         }
     }
-    combos[0] = 1;
-    for (i = 1; i <= MAX_DEGREE && i <= n_stones; i++)
-        combos[i] = combos[i-1] * (n_stones + 1 - i) / i;
+}
+
+
+Real Position::calculate_win_prob(Value alpha, U32 stone_index) const {
+    U32 total_stones = n_stones_[RED] + n_stones_[BLUE];
     Real prob_sum = 0.0;
-    for (i = 0; i < open_.len_; i++) {
+    U32 (*dp)[2*N_STONES+1][2*MAX_RESULT+1] = ways[stone_index];
+    for (U32 i = 0; i < open_.len_; i++) {
         U32 cell_id = open_.val_[i];
         U32 n_adj = adj_[cell_id].len_;
         Value val = value_[cell_id];
         Value diff = alpha - val;
         U32 n_acceptable_outcomes = 0;
-        for (k = diff + MAX_RESULT; k <= 2 * MAX_RESULT; k++)
-            n_acceptable_outcomes += ways[n_adj][n_stones][k];
+        for (Value k = diff + MAX_RESULT; k <= 2 * MAX_RESULT; k++)
+            n_acceptable_outcomes += dp[n_adj][total_stones][k];
         prob_sum += (Real)n_acceptable_outcomes / (Real)combos[n_adj];
     }
     return prob_sum / open_.len_;
@@ -421,45 +426,64 @@ Real Position::calculate_win_prob(Value alpha) const {
 
 
 std::pair<Real, Move> Position::get_best_alpha_move(Value alpha) {
-    Move best_move;
-    Real best_prob = -1000.0;
+    U32 i, j;
     Value * stones = stones_[turn_];
     U32 n_stones = n_stones_[turn_];
-    for (U32 i = 0; i < open_.len_; i++) {
-        for (U32 j = 0; j < n_stones; j++) {
+    U32 total_stones = n_stones_[RED] + n_stones_[BLUE] - 1;
+    
+    memset(ways, 0, sizeof(ways));
+    combos[0] = 1;
+    for (i = 1; i <= MAX_DEGREE && i <= total_stones; i++)
+        combos[i] = combos[i-1] * (total_stones + 1 - i) / i;
+    for (i = 0; i < n_stones; i++)
+        find_n_ways(i);
+    
+    Move best_move;
+    Real best_prob = -1000.0;
+    for (i = 0; i < open_.len_; i++) {
+        for (j = 0; j < n_stones; j++) {
             Value stone_value = m_ * stones[j];
             Move move(open_.val_[i], stone_value);
             make_move(move);
-            Real prob = calculate_win_prob(alpha);
+            Real prob = calculate_win_prob(alpha, j);
             unmake_move(move);
-            if (turn_ == BLUE)
-                prob = 1.0 - prob;
-            if (prob > best_prob) {
+            if (m_ * prob > best_prob) {
                 best_move = move;
-                best_prob = prob;
+                best_prob = m_ * prob;
             }
         }
     }
-    return std::pair<Real, Move>(best_prob, best_move);
+    return std::pair<Real, Move>(m_ * best_prob, best_move);
 }
 
 
 std::pair<Real, Move> Position::get_best_move() {
     Value alpha = 0;
     Value best_alpha = 400;
+    Value direction = 0;
     Move best_move;
     Real best_prob = 0.0;
-    while (alpha != best_alpha && alpha >= MIN_RESULT && alpha <= MAX_RESULT) {
+    while (alpha >= MIN_RESULT && alpha <= MAX_RESULT) {
         std::pair<Real, Move> result = get_best_alpha_move(alpha);
-        fprintf(stderr, "Alpha = %d: %.5lf\n", alpha, result.first);
-        if (result.first >= 0.5) {
+        Real red_win_prob = result.first;
+        fprintf(stderr, "Alpha = %d: %.5lf\n", alpha, red_win_prob);
+        if (best_alpha == 400 ||
+                (turn_ == RED && red_win_prob >= CHOOSE_TARGET_THRESH[RED]) ||
+                (turn_ == BLUE && red_win_prob < CHOOSE_TARGET_THRESH[BLUE])) {
             best_move = result.second;
-            best_prob = result.first;
+            best_prob = red_win_prob;
             best_alpha = alpha;
-            alpha += m_;
-        } else {
-            alpha -= m_;
         }
+        Value change;
+        if (red_win_prob >= CHOOSE_TARGET_THRESH[turn_])
+            change = 1;
+        else 
+            change = -1;
+        if (direction == 0)
+            direction = change;
+        else if (change != direction)
+            break;
+        alpha += change;
     }
     return std::pair<Real, Move>(best_prob, best_move);
 }

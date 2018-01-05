@@ -74,6 +74,9 @@ void init();
 #define N_MCT_NODES 500000
 
 extern const Real UCB_C;
+extern const Real TARGET_INCREMENT_THRESH[2];
+extern const Real TARGET_DECREMENT_THRESH[2];
+extern const Real CHOOSE_TARGET_THRESH[2];
 
 Real sigmoid(Real x);
 #endif

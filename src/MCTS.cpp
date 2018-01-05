@@ -373,7 +373,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
             test_root = roots_[alpha + MAX_RESULT];
             if (test_root != NULL) {
                 test_root->print(stderr);
-                if (test_root->val_ >= 0.4 || root == NULL) {
+                if (test_root->val_ >= CHOOSE_TARGET_THRESH[RED] || root == NULL) {
                     current_alpha_ = alpha;
                     root = test_root;
                 }
@@ -384,7 +384,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
             test_root = roots_[alpha + MAX_RESULT];
             if (test_root != NULL) {
                 test_root->print(stderr);
-                if (test_root->val_ < 0.6 || root == NULL) {
+                if (test_root->val_ < CHOOSE_TARGET_THRESH[BLUE] || root == NULL) {
                     current_alpha_ = alpha;
                     root = test_root;
                 }
@@ -446,17 +446,9 @@ Move MCTSearch::get_best_move(Position& pos) {
                 break;
             }
         } else {
-            Real increment_thresh, decrement_thresh;
-            if (pos.turn_ == RED) {
-                increment_thresh = 0.45;
-                decrement_thresh = 0.35;
-            } else {
-                increment_thresh = 0.65;
-                decrement_thresh = 0.55;
-            }
-            if (root->val_ >= increment_thresh && current_alpha_ < MAX_RESULT)
+            if (root->val_ >= TARGET_INCREMENT_THRESH[pos.turn_] && current_alpha_ < MAX_RESULT)
                 current_alpha_++;
-            if (root->val_ <= decrement_thresh && current_alpha_ > MIN_RESULT)
+            if (root->val_ <= TARGET_DECREMENT_THRESH[pos.turn_] && current_alpha_ > MIN_RESULT)
                 current_alpha_--;
         }
         time_now = get_time();

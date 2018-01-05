@@ -140,6 +140,9 @@ void init() {
 
 
 const Real UCB_C = 0.8;
+const Real TARGET_INCREMENT_THRESH[2] = {0.45, 0.65};
+const Real TARGET_DECREMENT_THRESH[2] = {0.35, 0.55};
+const Real CHOOSE_TARGET_THRESH[2] = {0.4, 0.6};
 
 Real sigmoid(Real x) {
     return 1.0 / (1.0 + exp(-x));

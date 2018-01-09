@@ -2,7 +2,7 @@
 #define POSITION_H_
 
 #include "globals.h"
-
+#include "AMAF.h"
 
 class List {
 public:
@@ -218,9 +218,13 @@ public:
 
     void get_all_moves(std::vector<Move>& moves);
 
+    bool is_reasonable_move(U32 cell_index, U32 stone_index);
+
     void get_all_reasonable_moves(std::vector<Move>& moves);
 
     void get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<Move>& moves);
+
+    void get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& amaf);
 
     U32 solve(long long end_time, U32& counter, U32& hash_hits,
             HashTable& table, HashInfo& hash_info, U64 stone_masks[2]);

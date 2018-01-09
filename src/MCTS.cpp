@@ -2,6 +2,7 @@
 
 
 void MCTNode::dispose() {
+    amaf_.dispose();
     for (U32 i = 0; i < children_.size(); i++) {
         children_[i]->dispose();
         put_free(children_[i]);
@@ -25,37 +26,35 @@ void MCTNode::init(MCTNode * parent, const Position& pos, const Move& move, Valu
     }
     n_red_wins_ = 0;
     n_playouts_ = 0;
-    child_moves_.clear();
-    children_.clear();
+    
     expanded_ = false;
-    generator_stone_index_ = pos.n_stones_[pos.turn_];
-    n_child_moves_ = 0;
+    all_children_generated_ = false;
+    
     n_children_fully_explored_ = 0;
+    children_.clear();
+    
     solved_ = false;
     solve_attempted_ = false;
     solver_positions_ = 0;
     solver_hash_hits_ = 0;
     solver_time_ = 0;
-    if (parent == NULL) {
-        amaf_[0].init(pos.open_.len_, pos.n_stones_[RED]);
-        amaf_[1].init(pos.open_.len_, pos.n_stones_[BLUE]);
-    }
+    amaf_.init(pos.open_.len_, pos.n_stones_[pos.turn_]);
 }
 
 
-MCTNode * MCTNode::select(Position& pos, AMAFTable& amaf) {
+MCTNode * MCTNode::select(Position& pos) {
     MCTNode * best_node = NULL;
     Real best_node_value = -1000.0, child_val;
     U32 i;
+    Real log_pp = log(std::max(1.0, (Real)n_playouts_));
     for (i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (! child->fully_explored_) {
             child_val = child->val_;
             if (pos.turn_ == BLUE)
                 child_val = 1.0 - child_val;
-            Real parent_playouts = (Real)n_playouts_;
             Real child_playouts = (Real)child->n_playouts_;
-            Real ucb_value = child_val + UCB_C * sqrt(log(parent_playouts) / child_playouts);
+            Real ucb_value = child_val + UCB_C * sqrt(log_pp / child_playouts);
             if (ucb_value > best_node_value) {
                 best_node = child;
                 best_node_value = ucb_value;
@@ -63,37 +62,36 @@ MCTNode * MCTNode::select(Position& pos, AMAFTable& amaf) {
         }
     }
     
-    int best_move_index = -1;
-    Real best_move_value = -1000.0;
-    for (i = 0; i < n_child_moves_; i++) {
-        Move& move = child_moves_[i];
-        std::pair<U32, U32> indices = pos.get_cell_and_stone_indices(move);
-        U32 n_amaf_playouts = amaf.get_n_playouts(indices.first, indices.second); 
-        if (n_amaf_playouts > 0)
-            child_val = amaf.get_value(indices.first, indices.second);
-        else
-            child_val = 0.5;
-        Real parent_playouts = std::max(1.0, (Real)n_playouts_);
-        child_val += UCB_C * sqrt(log(parent_playouts));
-        if (child_val > best_move_value) {
-            best_move_index = i;
-            best_move_value = child_val;
+    if (! all_children_generated_) {
+        U32 cell_index, stone_index;
+        generate_move(cell_index, stone_index, pos);
+        // since we don't know in advance whether all children have been generated,
+        // we might discover during selection that this node is already fully explored.
+        // This shouldn't happen during expansion however
+        if (cell_index != NO_CELL) {
+            U32 n_amaf_playouts = amaf_.get_n_playouts(cell_index, stone_index); 
+            if (n_amaf_playouts > 0)
+                child_val = amaf_.get_value(cell_index, stone_index);
+            else
+                child_val = 0.5;
+            child_val += UCB_C * sqrt(log_pp);
+            if (child_val > best_node_value) {
+                Move move(pos.open_.val_[cell_index],
+                        pos.m_ * pos.stones_[pos.turn_][stone_index]);
+                best_node = add_child(pos, move);
+            }
         }
     }
-    if (best_node == NULL || best_move_value > best_node_value) {
+
+    if (best_node == NULL) {
 #ifdef DEBUG_
-        assert(best_move_index != -1);
+        fprintf(stderr, "select returning this node\n");
+        fflush(stderr);
+        assert(is_now_fully_explored());
 #endif
-        n_child_moves_--;
-        Move best_move = child_moves_[best_move_index];
-        child_moves_[best_move_index] = child_moves_[n_child_moves_];
-        if (n_child_moves_ == 0)
-            generate_batch(pos);
-        return add_child(pos, best_move);
+        fully_explored_ = true;
+        return this;
     }
-#ifdef DEBUG_
-    assert(best_node != NULL);
-#endif
     return best_node;
 }
 
@@ -109,36 +107,34 @@ MCTNode *  MCTNode::add_child(Position& pos, const Move& move) {
 
 
 bool MCTNode::is_now_fully_explored() {
-    return generator_stone_index_ == 0 &&
-            n_child_moves_ == 0 &&
+    return all_children_generated_ &&
             n_children_fully_explored_ == children_.size();
 }
 
 
-void MCTNode::get_children(Position& pos) {
-    pos.get_all_reasonable_moves(child_moves_);
-    n_child_moves_ = child_moves_.size();
-}
-
-
-void MCTNode::generate_batch(Position& pos) {
-    child_moves_.clear();
-    while (child_moves_.size() == 0 && generator_stone_index_ > 0) {
-        generator_stone_index_--;
-        pos.get_all_reasonable_moves_with_stone(generator_stone_index_, child_moves_);
+void MCTNode::generate_move(U32& cell_index, U32& stone_index, Position& pos) {
+    cell_index = NO_CELL;
+    do {
+        amaf_.get_best(cell_index, stone_index);
+    } while (cell_index != NO_CELL && ! pos.is_reasonable_move(cell_index, stone_index));
+    
+    if (cell_index == NO_CELL) {
+        pos.get_untried_move(cell_index, stone_index, amaf_);
+        if (cell_index == NO_CELL) {
+            all_children_generated_ = true;
+            return;
+        }
     }
-    n_child_moves_ = child_moves_.size();
 }
     
 
-MCTNode * MCTNode::expand(Position& pos, AMAFTable& amaf) {
+MCTNode * MCTNode::expand(Position& pos) {
     expanded_ = true;
-    generate_batch(pos);
-    return select(pos, amaf);
+    return select(pos);
 }
 
 
-std::pair<U32, U32> simulation[N_CELLS];
+Move simulation[N_CELLS];
 
 bool MCTNode::light_playout(Position& pos, U32& move_count) {
     bool result = true;
@@ -155,9 +151,8 @@ bool MCTNode::light_playout(Position& pos, U32& move_count) {
             result_found = true;
             break;
         } 
-        Move move = pos.get_default_policy_move();
-        simulation[move_count] = pos.get_cell_and_stone_indices(move);
-        pos.make_move(move);
+        simulation[move_count] = pos.get_default_policy_move();
+        pos.make_move(simulation[move_count]);
         move_count++;
     }
     if (! result_found)
@@ -167,27 +162,38 @@ bool MCTNode::light_playout(Position& pos, U32& move_count) {
 }
 
 
-void MCTNode::ucb(Position& pos) {
+void MCTNode::simulate(Position& pos) {
 #ifdef DEBUG_
     assert(! fully_explored_);
 #endif
+    //fprintf(stderr, "Simulating\n");
+    //fflush(stderr);
     MCTNode * search_root = this;
-    U32 orig_turn = pos.turn_;
-    U32 move_count = 0, i;
+    MCTNode * new_search_root;
+    U32 move_count = 0, depth = 0, i;
     while (search_root->expanded_) {
-        search_root = search_root->select(pos, amaf_[pos.turn_]);
+        new_search_root = search_root->select(pos);
 #ifdef DEBUG_
-        assert(search_root != NULL);
+        assert(new_search_root != NULL);
 #endif
-        simulation[move_count] = pos.get_cell_and_stone_indices(search_root->move_);
+        if (new_search_root == search_root)
+            break;
+        search_root = new_search_root;
+        simulation[move_count] = search_root->move_;
         pos.make_move(search_root->move_);
         move_count++;
+        depth++;
     }
     
     if (! search_root->fully_explored_) { 
-        search_root = search_root->expand(pos, amaf_[pos.turn_]);
-        simulation[move_count] = pos.get_cell_and_stone_indices(search_root->move_);
+        new_search_root = search_root->expand(pos);
+#ifdef DEBUG_
+        assert(new_search_root != NULL && new_search_root != search_root);
+#endif
+        search_root = new_search_root;
+        simulation[move_count] = search_root->move_;
         move_count++;
+        depth++;
         pos.make_move(search_root->move_);
     }
     U32 result;
@@ -196,12 +202,13 @@ void MCTNode::ucb(Position& pos) {
     else
         result = search_root->light_playout(pos, move_count);
 
-    for (i = 0; i < move_count; i++) {
-        U32 turn = (orig_turn + i) % 2;
-        amaf_[turn].update(simulation[i].first, simulation[i].second, result != turn);
-    }
 
     while (search_root != NULL) {
+        for (i = depth; i < move_count; i += 2) {
+            std::pair<int, int> indices = pos.get_cell_and_stone_indices(simulation[i]);
+            search_root->amaf_.update(indices.first, indices.second, result != pos.turn_);
+        }
+        
         MCTNode * parent = search_root->parent_;
         if (search_root->fully_explored_ && search_root->expanded_) {
             search_root->val_ = -1000.0;
@@ -227,6 +234,7 @@ void MCTNode::ucb(Position& pos) {
             }
         }
         search_root = parent;
+        depth--;
     }
 }
 
@@ -429,7 +437,7 @@ Move MCTSearch::get_best_move(Position& pos) {
         if (pos.open_.len_ <= solver_start && ! root->solve_attempted_ && time_now - start_micros < solver_time)
             root->attempt_solve(pos, table_, solver_time - time_now + start_micros, false);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
-            root->ucb(pos);
+            root->simulate(pos);
             n_playouts++;
         } 
         if (root->fully_explored_) {
@@ -464,7 +472,7 @@ Move MCTSearch::get_best_move(Position& pos) {
         //if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
         //    root->attempt_solve(pos, table_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
-            root->ucb(pos);
+            root->simulate(pos);
             n_playouts++;
         } 
         if (root->fully_explored_) {

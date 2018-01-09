@@ -18,13 +18,11 @@ public:
 
     bool fully_explored_;
     bool expanded_;
+    bool all_children_generated_;
 
     U32 n_children_fully_explored_;
-    U32 n_child_moves_;
-    U32 generator_stone_index_;
-    std::vector<Move> child_moves_;
     std::vector<MCTNode*> children_;
-     
+          
     bool solved_;
     bool solve_attempted_;
     Move solution_;
@@ -32,24 +30,22 @@ public:
     U32 solver_hash_hits_;
     long long solver_time_;
 
-    AMAFTable amaf_[2];
+    AMAFTable amaf_;
 
 
     void init(MCTNode * parent, const Position& pos, const Move& move, Value alpha);
 
-    void ucb(Position& pos);
+    void simulate(Position& pos);
     
-    MCTNode * select(Position& pos, AMAFTable& amaf);
+    MCTNode * select(Position& pos);
 
     MCTNode * add_child(Position& pos, const Move& move);
 
     bool is_now_fully_explored();
 
-    void get_children(Position& pos);
+    void generate_move(U32& cell_index, U32& stone_index, Position& pos);
 
-    void generate_batch(Position& pos);
-
-    MCTNode * expand(Position& pos, AMAFTable& amaf);
+    MCTNode * expand(Position& pos);
 
     bool light_playout(Position& pos, U32& move_count);
 

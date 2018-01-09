@@ -14,7 +14,8 @@ int main(int argc, char** argv) {
     }
 	init();
 	init_free_list();
-	
+    init_amaf_free_list();
+    	
     char cell_str[5];
     U32 blocked[N_BLOCKED_CELLS];
     for (U32 i = 0; i < N_BLOCKED_CELLS; i++) {
@@ -32,11 +33,13 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Time left: %.2f seconds\n", (float)time_left / 1e6);
 #ifdef DEBUG_
         assert(n_free == N_MCT_NODES);
+        assert(n_amaf_free == N_AMAF_RECORDS);
 #endif
         MCTSearch search(pos, alpha);
         Move move = search.get_best_move(pos);
         alpha = search.current_alpha_;
         fprintf(stderr, "Used %u nodes\n", N_MCT_NODES - n_free);
+        fprintf(stderr, "Used %u AMAF records\n", N_AMAF_RECORDS - n_amaf_free);
 		pos.make_move(move);
         move.to_str(move_str);
 		send_move(move_str);
@@ -73,4 +76,5 @@ int main(int argc, char** argv) {
 // EventHorizon3_0_1: time usage
 // EventHorizon3_0_2: tune UCB_C
 // EventHorizon3_0_3: make opening heuristic calculation more efficient and more optimistic
+// EventHorizon4_0_0: store AMAF information in every node in preparation for implementing RAVE 
 

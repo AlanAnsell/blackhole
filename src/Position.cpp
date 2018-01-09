@@ -1,4 +1,5 @@
 #include "Position.h"
+#include "AMAF.h"
 
 
 Move::Move(char * move_str, U32 turn) {
@@ -260,6 +261,26 @@ void Position::unmake_move(const Move& move) {
     assert(n_stale_[BLUE] <= n_dead_[BLUE]);
 #endif
 }
+
+
+/*void Position::light_unmake_move(const Move& move) {
+    turn_ ^= 1;
+    m_ *= -1;
+    
+    U32 cell_id = move.cell_;
+    Value stone_number = m_ * move.stone_value_;
+    Value * stones = stones_[turn_];
+    U32 * stone_loc = stone_loc_[turn_];
+    U32& n_stones = n_stones_[turn_];
+    U32 i;
+    for (i = n_stones; i && stone_number < stones[i-1]; i--) {
+        stones[i] = stones[i-1];
+    }
+    stones[i] = stone_number;
+    n_stones++;
+   
+    open_.readd(cell_id); 
+}*/
 
 
 Move Position::get_random_move() {
@@ -570,6 +591,56 @@ void Position::get_all_moves(std::vector<Move>& moves) {
 }
 
 
+bool Position::is_reasonable_move(U32 cell_index, U32 stone_index) {
+    U32 cell_id = open_.val_[cell_index];
+    Value stone_number = stones_[turn_][stone_index];
+    //Value stone_value = m_ * stone_number;
+    
+    U64 we_control = controls_;
+    if (turn_ == RED)
+        we_control = ~we_control;
+    
+    U64 mask = MASK(cell_id);
+    if (stale_[1 - turn_] & mask)
+        //TODO: allow only the worst stale cell to be filled
+        return stone_index == 0;
+    if (stale_[turn_] & mask)
+        return stone_index == 0 && dead_[turn_] == open_mask_;
+
+    U32 op = 1 - turn_;
+    if (stone_index < n_stale_[op])
+        return false;
+    
+    U32 n_stones = n_stones_[turn_];
+    if (n_stones == n_dead_[1 - turn_] && ! (dead_[1 - turn_] & mask))
+        return false;
+
+    if (adj_[cell_id].len_ == 1) {
+        Value cell_value = value_[cell_id] * m_;
+        U32 adj_id = adj_[cell_id].val_[0];
+        if (adj_[adj_id].len_ == 1) {
+            Value adj_value = value_[adj_id] * m_;
+            if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
+                if (stone_index == 0)
+                    return true;
+                else {
+                    Value prev_stone_number;
+                    if (stone_index == 0)
+                        prev_stone_number = 0;
+                    else
+                        prev_stone_number = stones_[turn_][stone_index - 1];
+                    Value extra_req = m_ * (alpha_ - OFFSET[turn_]) - adj_value;
+                    return stone_number >= extra_req && prev_stone_number < extra_req;
+                }       
+            }
+        } else {
+            return ! (we_control & mask);
+        }
+    }
+    return true;
+}
+ 
+
 void Position::get_all_reasonable_moves(std::vector<Move>& moves) {
     Value * stones = stones_[turn_];
     U32 n_stones = n_stones_[turn_];
@@ -684,6 +755,25 @@ void Position::get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<
     }
     if (best_stale != NO_CELL)
         moves.push_back(Move(best_stale, stone_value));
+}
+
+
+void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& amaf) {
+    U32 n_stones = n_stones_[turn_];
+    stone_index = n_stones;
+    while (stone_index > 0) {
+        stone_index--;
+        std::vector<Move> moves;
+        get_all_reasonable_moves_with_stone(stone_index, moves);
+        for (U32 i = 0; i < moves.size(); i++) {
+            cell_index = open_.loc_[moves[i].cell_];
+            if (! amaf.is_tried(cell_index, stone_index)) {
+                amaf.set_tried(cell_index, stone_index);
+                return;
+            }
+        }
+    }
+    cell_index = NO_CELL;
 }
 
 

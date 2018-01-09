@@ -1,2 +1,2 @@
-g++ -std=c++11 -D FAST_ -D NO_DEBUG_ -Wall -O2 -o ../../bin/EventHorizon3_0_3o30 main.cpp Position.cpp globals.cpp MCTS.cpp
+g++ -std=c++11 -D SLOW_ -D DEBUG_ -Wall -O2 -o ../../bin/EventHorizon4_0_0 main.cpp Position.cpp globals.cpp MCTS.cpp AMAF.cpp
 

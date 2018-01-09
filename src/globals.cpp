@@ -1,7 +1,7 @@
 #include "globals.h"
 
 const char * ENGINE_NAME = "EventHorizon";
-const char * VERSION_NUMBER = "2.4.1";
+const char * VERSION_NUMBER = "4.0.0";
 
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
@@ -10,8 +10,13 @@ Value OFFSET[2] = {0, 1};
 long long time_limit = 2000000;
 long long time_left = 1900000;
 #else
-long long time_limit = 4900000;
-long long time_left = time_limit;
+#ifdef SLOW_
+long long time_limit = 10000000;
+long long time_left =   9800000;
+#else
+long long time_limit = 5000000;
+long long time_left =  4900000;
+#endif
 #endif
 long long time_started, time_ended;
 

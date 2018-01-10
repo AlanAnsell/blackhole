@@ -3,20 +3,28 @@
 
 #include "globals.h"
 
-struct AMAFRecord {
-    U32 n_wins_;
-    U32 n_playouts_;
-    U32 index_;
-    U32 cell_index_;
-    U32 stone_index_;
-    bool tried_;
+#define UNTRIED 0
+#define TRIED 1
 
-    void init(U32 cell_index, U32 stone_index) {
-        cell_index_ = cell_index;
-        stone_index_ = stone_index;
-        n_wins_= 0;
+
+struct AMAFRecord {
+    U16 n_wins_;
+    U16 n_playouts_;
+    U16 index_;
+    U8 cell_index_;
+    U8 stone_index_;
+    bool played_;
+    
+    inline void init_generated() {
         n_playouts_ = 0;
-        tried_ = false;
+        played_ = false;
+    }
+     
+    void init(U32 cell_index, U32 stone_index, bool win) {
+        cell_index_ = (U8)cell_index;
+        stone_index_ = (U8)stone_index;
+        n_wins_= (U16)win;
+        n_playouts_ = 1;
     }
 
     inline bool operator < (const AMAFRecord& other) const {
@@ -25,28 +33,34 @@ struct AMAFRecord {
 
 };
 
-#define N_AMAF_RECORDS 2000000
+#define N_AMAF_RECORDS 7000000
 
 extern AMAFRecord amaf_store[N_AMAF_RECORDS];
-extern AMAFRecord * amaf_free_list[N_AMAF_RECORDS];
-extern U32 n_amaf_free;
+extern U32 amaf_pointer;
 
 void init_amaf_free_list();
 
+AMAFRecord * amaf_alloc(U32 n);
+
 AMAFRecord * get_amaf_record();
-
-void put_amaf_record(AMAFRecord * record);
-
 
 class AMAFTable {
 public:
     U32 n_stones_;
+    U32 n_open_;
     std::vector<AMAFRecord*> heap_;
-    std::vector<std::vector<AMAFRecord*>> amaf_;
+    std::vector<AMAFRecord*> amaf_;
     
     void init(U32 n_open, U32 n_stones);
+   
+    AMAFRecord * cell_init(U32 cell_index);
+    
+    inline void check_initialised() {
+        if (amaf_.size() == 0)
+            amaf_ = std::vector<AMAFRecord*>(n_open_, NULL);
+    }
      
-    void dispose();
+    void play(U32 cell_index, U32 stone_index);
     
     U32 get_n_playouts(U32 cell_index, U32 stone_index);
     
@@ -56,9 +70,7 @@ public:
 
     void get_best(U32& cell_index, U32& stone_index);
 
-    void set_tried(U32 cell_index, U32 stone_index);
-
-    bool is_tried(U32 cell_index, U32 stone_index);
+    bool is_played(U32 cell_index, U32 stone_index);
 
 private:
     void heap_insert(AMAFRecord * record);

@@ -820,10 +820,8 @@ void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& am
         for (i = 0; i < moves.size(); i++) {
             move = move_infos[i].move_;
             cell_index = open_.loc_[move.cell_];
-            if (! amaf.is_tried(cell_index, stone_index)) {
-                amaf.set_tried(cell_index, stone_index);
+            if (! amaf.is_played(cell_index, stone_index))
                 return;
-            }
         }
     }
     cell_index = NO_CELL;

@@ -1,101 +1,98 @@
 #include "AMAF.h"
 
 AMAFRecord amaf_store[N_AMAF_RECORDS];
-AMAFRecord * amaf_free_list[N_AMAF_RECORDS];
-U32 n_amaf_free;
+U32 amaf_pointer;
 
-//const AMAFRecord * UNREASONABLE - new AMAFRecord;
 
 void init_amaf_free_list() {
-    for (n_amaf_free = 0; n_amaf_free < N_AMAF_RECORDS; n_amaf_free++)
-        amaf_free_list[n_amaf_free] = &amaf_store[n_amaf_free];
+    amaf_pointer = 0;
 }
 
 
-AMAFRecord * get_amaf_record() {
+AMAFRecord * amaf_alloc(U32 n) {
 #ifdef DEBUG_
-    assert(n_amaf_free > 0);
+    assert(amaf_pointer + n <= N_AMAF_RECORDS);
 #endif
-    n_amaf_free--;
-    return amaf_free_list[n_amaf_free];
-}
-
-
-void put_amaf_record(AMAFRecord * record) {
-    amaf_free_list[n_amaf_free++] = record;
+    amaf_pointer += n;
+    return &amaf_store[amaf_pointer - n];
 }
 
 
 void AMAFTable::init(U32 n_open, U32 n_stones) {
     n_stones_ = n_stones;
-    amaf_ = std::vector<std::vector<AMAFRecord*>>(n_open, std::vector<AMAFRecord*>());
+    n_open_ = n_open;
+    amaf_.clear(); 
     heap_ = std::vector<AMAFRecord*>();
 }
 
 
-void AMAFTable::dispose() {
-    for (U32 i = 0; i < amaf_.size(); i++) {
-        std::vector<AMAFRecord*> records = amaf_[i];
-        for (U32 j = 0; j < records.size(); j++)
-            if (records[j] != NULL)
-                put_amaf_record(records[j]);
+AMAFRecord * AMAFTable::cell_init(U32 cell_index) {
+#ifdef DEBUG_
+    assert(amaf_.size() > 0);
+    assert(amaf_[cell_index] == NULL);
+#endif
+    AMAFRecord * records = amaf_alloc(n_stones_);
+    amaf_[cell_index] = records;
+    for (U32 i = 0; i < n_stones_; i++)
+        records[i].init_generated();
+    return records;
+}
+
+
+void AMAFTable::play(U32 cell_index, U32 stone_index) {
+    check_initialised();
+    AMAFRecord * records = amaf_[cell_index];
+    if (records == NULL)
+        records = cell_init(cell_index);
+    AMAFRecord& record = records[stone_index];
+#ifdef DEBUG_
+    assert(! record.played_);
+#endif
+    if (record.n_playouts_ != 0) {
+#ifdef DEBUG_
+        assert(record.played_ == 0);
+#endif
+        pop_heap();
     }
-    amaf_.clear();
-    heap_.clear();
+    record.played_ = true;
 }
 
 
 U32 AMAFTable::get_n_playouts(U32 cell_index, U32 stone_index) {
-    std::vector<AMAFRecord*>& records = amaf_[cell_index];
-    if (records.empty())
+    if (amaf_.empty())
         return 0;
-    AMAFRecord * record = records[stone_index];
-    if (record == NULL /*|| record == UNREASONABLE*/)
-        return 0;
-    return record->n_playouts_;
+    AMAFRecord * records = amaf_[cell_index];
+    if (records == NULL)
+        return 0;    
+    return records[stone_index].n_playouts_;
 }
 
 Real AMAFTable::get_value(U32 cell_index, U32 stone_index) {
 #ifdef DEBUG_
-    assert(! amaf_[cell_index].empty());
+    assert(amaf_.size() > 0 && amaf_[cell_index] != NULL);
 #endif
-    AMAFRecord * record = amaf_[cell_index][stone_index];
+    AMAFRecord& record = amaf_[cell_index][stone_index];
 #ifdef DEBUG_
-    assert(record != NULL /*&& record != UNREASONABLE*/ && record->n_playouts_ != 0);
+    assert(record.n_playouts_ != 0);
 #endif
-    return (Real)record->n_wins_ / (Real)record->n_playouts_;
+    return (Real)record.n_wins_ / (Real)record.n_playouts_;
 }
 
 void AMAFTable::update(U32 cell_index, U32 stone_index, bool win) {
-    //fprintf(stderr, "update called\n");
-    //fflush(stderr);
-    std::vector<AMAFRecord*>& records = amaf_[cell_index];
-    if (records.empty())
-        records = std::vector<AMAFRecord*>(n_stones_, NULL);
-    AMAFRecord * record;
-    if (records[stone_index] == NULL) {
-        //printf("Getting new record\n");
-        //fflush(stdout);
-        record = get_amaf_record();
-        record->init(cell_index, stone_index);
-        record->n_playouts_ = 1;
-        if (win)
-            record->n_wins_ = 1;
-        records[stone_index] = record;
-        //printf("About to heap_insert\n");
-        //fflush(stdout);
-        heap_insert(record);
-        //printf("Did heap_insert\n");
-        //fflush(stdout);    
+    check_initialised();
+    AMAFRecord * records = amaf_[cell_index];
+    if (records == NULL)
+        records = cell_init(cell_index);
+    AMAFRecord& record = records[stone_index];
+    if (record.n_playouts_ == 0) {
+        record.init(cell_index, stone_index, win);
+        if (! record.played_)
+            heap_insert(&record);
     } else {
-        record = records[stone_index];
-/*#ifdef DEBUG_
-        assert(record != UNREASONABLE);
-#endif*/
-        record->n_wins_ += win;
-        record->n_playouts_++;
-        if (! record->tried_)
-            heap_update(record, win);
+        record.n_wins_ += win;
+        record.n_playouts_++;
+        if (! record.played_)
+            heap_update(&record, win);
     }
 }
 
@@ -108,35 +105,18 @@ void AMAFTable::get_best(U32& cell_index, U32& stone_index) {
     AMAFRecord * record = heap_[0];
     cell_index = record->cell_index_;
     stone_index = record->stone_index_;
-    record->tried_ = true;
-    pop_heap();
+    //record->tried_ = true;
+    //pop_heap();
 }
 
 
-void AMAFTable::set_tried(U32 cell_index, U32 stone_index) {
-    //fprintf(stderr, "set_tried called\n");
-    //fflush(stderr);
-    std::vector<AMAFRecord*>& records = amaf_[cell_index];
-    if (records.empty())
-        records = std::vector<AMAFRecord*>(n_stones_, NULL);
-#ifdef DEBUG_
-    assert(records[stone_index] == NULL);
-#endif
-    AMAFRecord * record = get_amaf_record();
-    records[stone_index] = record;
-    record->init(cell_index, stone_index);
-    record->tried_ = true;
-}
-
-
-bool AMAFTable::is_tried(U32 cell_index, U32 stone_index) {
-    std::vector<AMAFRecord*>& records = amaf_[cell_index];
-    if (records.empty())
-        return false; 
-    AMAFRecord * record = records[stone_index];
-    if (record == NULL)
+bool AMAFTable::is_played(U32 cell_index, U32 stone_index) {
+    if (amaf_.size() == 0)
         return false;
-    return record->tried_;
+    AMAFRecord * records = amaf_[cell_index];
+    if (records == NULL)
+        return false; 
+    return records[stone_index].played_;
 }
 
 

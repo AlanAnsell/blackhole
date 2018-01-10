@@ -28,6 +28,8 @@
 #define MASK(x) (1LL << (U64)(x))
 
 typedef int Value;
+typedef unsigned char U8;
+typedef unsigned short int U16;
 typedef unsigned int U32;
 typedef unsigned long long U64;
 typedef double Real;
@@ -71,7 +73,7 @@ U32 cell_name_to_id(const char * name);
 void init();
 
 
-#define N_MCT_NODES 100000
+#define N_MCT_NODES 80000
 
 //extern const Real UCB_C;
 extern const Real TARGET_INCREMENT_THRESH[2];

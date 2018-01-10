@@ -30,21 +30,24 @@ int main(int argc, char** argv) {
         pos.make_move(Move(move_str, pos.turn_));
 	Value alpha = 0;
     while (pos.open_.len_ > 1) {
-        fprintf(stderr, "Time left: %.2f seconds\n", (float)time_left / 1e6);
+        fprintf(stderr, "Time at start of loop: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
 #ifdef DEBUG_
         assert(n_free == N_MCT_NODES);
-        assert(n_amaf_free == N_AMAF_RECORDS);
 #endif
         MCTSearch search(pos, alpha);
         Move move = search.get_best_move(pos);
         alpha = search.current_alpha_;
         fprintf(stderr, "Used %u nodes\n", N_MCT_NODES - n_free);
-        fprintf(stderr, "Used %u AMAF records\n", N_AMAF_RECORDS - n_amaf_free);
+        fprintf(stderr, "Used %u AMAF records\n", amaf_pointer);
+        fprintf(stderr, "Time after search: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
+        fflush(stderr);
 		pos.make_move(move);
         move.to_str(move_str);
 		send_move(move_str);
 		get_move(move_str);
         pos.make_move(Move(move_str, pos.turn_));
+        fprintf(stderr, "Time at end of loop: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
+        fflush(stderr);
 	}
 	return 0;
 }
@@ -77,4 +80,5 @@ int main(int argc, char** argv) {
 // EventHorizon3_0_2: tune UCB_C
 // EventHorizon3_0_3: make opening heuristic calculation more efficient and more optimistic
 // EventHorizon4_0_0: implement RAVE, modify default policy, alter solver move ordering 
+// EventHorizon4_0_1: modify memory allocation to be more time and space efficient 
 

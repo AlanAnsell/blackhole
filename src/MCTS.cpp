@@ -2,7 +2,6 @@
 
 
 void MCTNode::dispose() {
-    amaf_.dispose();
     for (U32 i = 0; i < children_.size(); i++) {
         children_[i]->dispose();
         put_free(children_[i]);
@@ -84,6 +83,7 @@ MCTNode * MCTNode::select(Position& pos) {
                 Move move(pos.open_.val_[cell_index],
                         pos.m_ * pos.stones_[pos.turn_][stone_index]);
                 best_node = add_child(pos, move);
+                amaf_.play(cell_index, stone_index);
             }
         }
     }
@@ -119,9 +119,12 @@ bool MCTNode::is_now_fully_explored() {
 
 void MCTNode::generate_move(U32& cell_index, U32& stone_index, Position& pos) {
     cell_index = NO_CELL;
-    do {
+    while (true) {
         amaf_.get_best(cell_index, stone_index);
-    } while (cell_index != NO_CELL && ! pos.is_reasonable_move(cell_index, stone_index));
+        if (cell_index == NO_CELL || pos.is_reasonable_move(cell_index, stone_index))
+            break;
+        amaf_.play(cell_index, stone_index);
+    }
     
     if (cell_index == NO_CELL) {
         pos.get_untried_move(cell_index, stone_index, amaf_);
@@ -414,12 +417,6 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
 
 
 Move MCTSearch::get_best_move(Position& pos) {
-    if (pos.open_.len_ >= 32) {
-        std::pair<Real, Move> search_result = pos.get_best_move();
-        //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
-        return search_result.second;
-    }
-    
     Real time_left_r = (Real) time_left;
     Real use_proportion;
     int moves_left = ((int)pos.open_.len_ - 16) / 2;
@@ -441,12 +438,16 @@ Move MCTSearch::get_best_move(Position& pos) {
     MCTNode * root;
     U32 solver_start = 19;
     
+    init_amaf_free_list();
+        
     while (time_now - start_micros < alpha_time) {
         pos.set_alpha(current_alpha_);
         root = get_or_make_root(current_alpha_, pos);
         if (pos.open_.len_ <= solver_start && ! root->solve_attempted_ && time_now - start_micros < solver_time)
             root->attempt_solve(pos, table_, solver_time - time_now + start_micros, false);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
+            //fprintf(stderr, "Simulation %u\n", root->n_playouts_);
+            //fflush(stderr);
             root->simulate(pos);
             n_playouts++;
         } 
@@ -482,6 +483,8 @@ Move MCTSearch::get_best_move(Position& pos) {
         //if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
         //    root->attempt_solve(pos, table_);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
+            //fprintf(stderr, "Simulation %u\n", root->n_playouts_);
+            //fflush(stderr);
             root->simulate(pos);
             n_playouts++;
         } 
@@ -523,7 +526,7 @@ Move MCTSearch::get_best_move(Position& pos) {
         }
     }
 
-    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts, (double)(time_now - start_micros) / 1e6);
+    fprintf(stderr, "%u playouts in %.3lfs\n", n_playouts, (double)(get_time() - time_started) / 1e6);
         
     if (root->fully_explored_) {
         fprintf(stderr, "Search tree fully explored\n");

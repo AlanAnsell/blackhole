@@ -47,7 +47,7 @@ public:
 
     MCTNode * expand(Position& pos);
 
-    bool light_playout(Position& pos, U32& move_count);
+    bool playout(Position& pos, U32& move_count);
 
     bool attempt_solve(Position& pos, HashTable& table, long long allowed_time, bool break_ties);
 

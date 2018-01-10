@@ -301,7 +301,7 @@ U32 lottery(U32 * tickets, U32 n_tickets) {
 Move Position::get_default_policy_move() {
     U32 tickets[N_CELLS];
     U32 total_tickets = 0;
-    U32 i;
+    U32 i, j;
     U32 best_stale = NO_CELL;
     U32 cell_id;
     Value best_stale_val = 1000;
@@ -317,10 +317,19 @@ Move Position::get_default_policy_move() {
             }
         } else {
             if ((dead_[1-turn_] & mask) || (n_stones_[turn_] > n_dead_[1-turn_])) {
-                if ((bool)(controls_ & (1LL << U64(cell_id))) == (bool)turn_)
-                    tickets[i] = 1;
-                else
-                    tickets[i] = 3;
+                int swing = 0;
+                if (dead_[turn_] & mask)
+                    swing = -1;
+                else if (dead_[1 - turn_] & mask)
+                    swing = 1;
+                List& adj = adj_[cell_id];
+                for (j = 0; j < adj.len_; j++) {
+                    U32 adj_id = adj.val_[j];
+                    U64 adj_mask = MASK(adj_id);
+                    if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
+                        swing++;
+                }
+                tickets[i] = swing + 2;
                 total_tickets += tickets[i];
             }
         }
@@ -329,11 +338,14 @@ Move Position::get_default_policy_move() {
         tickets[best_stale] = 1;
         total_tickets++;
     }
-    
+#ifdef DEBUG_
+    assert(total_tickets > 0);
+#endif
+     
     U32 cell_index = lottery(tickets, total_tickets);
     cell_id = open_.val_[cell_index];
 
-    Value reqs[MAX_DEGREE];
+    /*Value reqs[MAX_DEGREE];
     U32 n_uncontrolled = 0;
     Value req_val = parity[turn_] * (alpha_ - OFFSET[turn_]);
     List& adj = adj_[cell_id];
@@ -344,7 +356,7 @@ Move Position::get_default_policy_move() {
             n_uncontrolled++;
         }
     }
-    std::sort(reqs, reqs + n_uncontrolled);
+    std::sort(reqs, reqs + n_uncontrolled);*/
     
     Value * stones = stones_[turn_];
     U32 n_stones = n_stones_[turn_];
@@ -354,9 +366,9 @@ Move Position::get_default_policy_move() {
     else {
         total_tickets = 0;
         for (i = n_stale_[1 - turn_]; i < n_stones; i++) {
-            U32 changes;
-            for (changes = 0; changes < n_uncontrolled && stones[i] <= reqs[changes]; changes++) {}
-            tickets[i] = 20 * (changes + 1) - stones[i];
+            //U32 changes;
+            //for (changes = 0; changes < n_uncontrolled && stones[i] <= reqs[changes]; changes++) {}
+            tickets[i] = /*20 * (changes + 1) -*/ stones[i];
             total_tickets += tickets[i];
         }
 #ifdef DEBUG_
@@ -758,28 +770,11 @@ void Position::get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<
 }
 
 
-void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& amaf) {
-    U32 n_stones = n_stones_[turn_];
-    stone_index = n_stones;
-    while (stone_index > 0) {
-        stone_index--;
-        std::vector<Move> moves;
-        get_all_reasonable_moves_with_stone(stone_index, moves);
-        for (U32 i = 0; i < moves.size(); i++) {
-            cell_index = open_.loc_[moves[i].cell_];
-            if (! amaf.is_tried(cell_index, stone_index)) {
-                amaf.set_tried(cell_index, stone_index);
-                return;
-            }
-        }
-    }
-    cell_index = NO_CELL;
-}
-
-
 struct MoveInfo {
     Move move_;
     int swing_;
+
+    MoveInfo() {}
 
     MoveInfo(const Move& move, int swing): move_(move), swing_(swing) {}
 
@@ -791,6 +786,48 @@ struct MoveInfo {
         return move_.cell_ < other.move_.cell_;
     }
 };
+
+
+void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& amaf) {
+    U32 n_stones = n_stones_[turn_];
+    stone_index = n_stones;
+    U32 i, j;
+    while (stone_index > 0) {
+        stone_index--;
+        std::vector<Move> moves;
+        get_all_reasonable_moves_with_stone(stone_index, moves);
+        std::vector<MoveInfo> move_infos(moves.size());
+        Move move;
+        for (i = 0; i < moves.size(); i++) {
+            move = moves[i];
+            U32 cell_id = move.cell_;
+            int swing = 0;
+            U64 mask = MASK(cell_id);
+            if (dead_[turn_] & mask)
+                swing = -1;
+            else if (dead_[1 - turn_] & mask)
+                swing = 1;
+            List& adj = adj_[cell_id];
+            for (j = 0; j < adj.len_; j++) {
+                U32 adj_id = adj.val_[j];
+                U64 adj_mask = MASK(adj_id);
+                if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
+                    swing++;
+            }
+            move_infos[i] = MoveInfo(move, swing);
+        }
+        std::sort(move_infos.begin(), move_infos.end());
+        for (i = 0; i < moves.size(); i++) {
+            move = move_infos[i].move_;
+            cell_index = open_.loc_[move.cell_];
+            if (! amaf.is_tried(cell_index, stone_index)) {
+                amaf.set_tried(cell_index, stone_index);
+                return;
+            }
+        }
+    }
+    cell_index = NO_CELL;
+}
 
 
 U32 Position::solve(long long end_time, U32& counter, U32& hash_hits,
@@ -815,16 +852,12 @@ U32 Position::solve(long long end_time, U32& counter, U32& hash_hits,
     std::vector<MoveInfo> move_infos;
     U32 i, j;
     U32 op = 1 - turn_;
-    //U64 opp_controls = controls_;
-    //if (turn_ == BLUE)
-    //    opp_controls = ~opp_controls;
     for (i = 0; i < moves.size(); i++) {
         Move move = moves[i];
         U32 cell_id = move.cell_;
-        int swing = adj_[cell_id].len_;
-        //U64 mask = MASK(cell_id);
-        //int swing = 0;
-        /*if (dead_[turn_] & mask)
+        U64 mask = MASK(cell_id);
+        int swing = 0;
+        if (dead_[turn_] & mask)
             swing = -1;
         else if (dead_[op] & mask)
             swing = 1;
@@ -832,9 +865,9 @@ U32 Position::solve(long long end_time, U32& counter, U32& hash_hits,
         for (j = 0; j < adj.len_; j++) {
             U32 adj_id = adj.val_[j];
             U64 adj_mask = MASK(adj_id);
-            if ((opp_controls & adj_mask) && ! (dead_[op] & adj_mask))
+            if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
                 swing++;
-        }*/
+        }
         move_infos.push_back(MoveInfo(move, swing));
     }
     std::sort(move_infos.begin(), move_infos.end());
@@ -892,7 +925,7 @@ std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter
         for (j = 0; j < adj.len_; j++) {
             U32 adj_id = adj.val_[j];
             U64 adj_mask = MASK(adj_id);
-            if ((opp_controls & adj_mask) && ! (dead_[op] & adj_mask))
+            if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
                 swing++;
         }
         move_infos.push_back(MoveInfo(move, swing));

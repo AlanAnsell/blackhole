@@ -144,7 +144,7 @@ void init() {
 }
 
 
-const Real UCB_C = 0.8;
+//const Real UCB_C = 0.1;
 const Real TARGET_INCREMENT_THRESH[2] = {0.45, 0.65};
 const Real TARGET_DECREMENT_THRESH[2] = {0.35, 0.55};
 const Real CHOOSE_TARGET_THRESH[2] = {0.4, 0.6};

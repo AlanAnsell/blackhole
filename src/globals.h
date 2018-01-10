@@ -71,9 +71,9 @@ U32 cell_name_to_id(const char * name);
 void init();
 
 
-#define N_MCT_NODES 120000
+#define N_MCT_NODES 100000
 
-extern const Real UCB_C;
+//extern const Real UCB_C;
 extern const Real TARGET_INCREMENT_THRESH[2];
 extern const Real TARGET_DECREMENT_THRESH[2];
 extern const Real CHOOSE_TARGET_THRESH[2];

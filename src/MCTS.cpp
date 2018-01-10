@@ -46,18 +46,23 @@ MCTNode * MCTNode::select(Position& pos) {
     MCTNode * best_node = NULL;
     Real best_node_value = -1000.0, child_val;
     U32 i;
-    Real log_pp = log(std::max(1.0, (Real)n_playouts_));
+    Real log_pp = log((Real)n_playouts_);
     for (i = 0; i < children_.size(); i++) {
         MCTNode * child = children_[i];
         if (! child->fully_explored_) {
-            child_val = child->val_;
+            std::pair<U32, U32> indices = pos.get_cell_and_stone_indices(child->move_);
+            U32 n_amaf = amaf_.get_n_playouts(indices.first, indices.second);
+            Real beta = (Real)n_amaf / (n_amaf + child->n_playouts_ + (RAVE_C * n_amaf) * child->n_playouts_);
+            Real mc_val = child->val_;
             if (pos.turn_ == BLUE)
-                child_val = 1.0 - child_val;
-            Real child_playouts = (Real)child->n_playouts_;
-            Real ucb_value = child_val + UCB_C * sqrt(log_pp / child_playouts);
-            if (ucb_value > best_node_value) {
+                mc_val = 1.0 - val_;
+            child_val = (1.0 - beta) * mc_val + beta * amaf_.get_value(indices.first, indices.second) + 
+                    UCB_C * sqrt(log_pp / child->n_playouts_);
+            //Real child_playouts = (Real)child->n_playouts_;
+            //Real ucb_value = child_val + UCB_C * sqrt(log_pp / child_playouts);
+            if (child_val > best_node_value) {
                 best_node = child;
-                best_node_value = ucb_value;
+                best_node_value = child_val;
             }
         }
     }
@@ -84,11 +89,11 @@ MCTNode * MCTNode::select(Position& pos) {
     }
 
     if (best_node == NULL) {
-#ifdef DEBUG_
+/*#ifdef DEBUG_
         fprintf(stderr, "select returning this node\n");
         fflush(stderr);
         assert(is_now_fully_explored());
-#endif
+#endif*/
         fully_explored_ = true;
         return this;
     }
@@ -136,7 +141,7 @@ MCTNode * MCTNode::expand(Position& pos) {
 
 Move simulation[N_CELLS];
 
-bool MCTNode::light_playout(Position& pos, U32& move_count) {
+bool MCTNode::playout(Position& pos, U32& move_count) {
     bool result = true;
     bool result_found = false;
     pos.take_snapshot();
@@ -185,7 +190,7 @@ void MCTNode::simulate(Position& pos) {
         depth++;
     }
     
-    if (! search_root->fully_explored_) { 
+    /*if (! search_root->fully_explored_) { 
         new_search_root = search_root->expand(pos);
 #ifdef DEBUG_
         assert(new_search_root != NULL && new_search_root != search_root);
@@ -195,16 +200,21 @@ void MCTNode::simulate(Position& pos) {
         move_count++;
         depth++;
         pos.make_move(search_root->move_);
-    }
+    }*/
     U32 result;
     if (search_root->fully_explored_)
         result = (search_root->val_ == 1.0);
-    else
-        result = search_root->light_playout(pos, move_count);
-
+    else {
+        result = search_root->playout(pos, move_count);
+        search_root->expanded_ = true;
+        search_root = search_root->add_child(pos, simulation[depth]);
+        pos.make_move(simulation[depth]);
+        depth++;
+    }
 
     while (search_root != NULL) {
-        for (i = depth; i < move_count; i += 2) {
+        U32 last_move = std::min(move_count, depth + 11);
+        for (i = depth; i < last_move; i += 2) {
             std::pair<int, int> indices = pos.get_cell_and_stone_indices(simulation[i]);
             search_root->amaf_.update(indices.first, indices.second, result != pos.turn_);
         }
@@ -404,7 +414,7 @@ MCTNode * MCTSearch::select_alpha(const Position& pos) {
 
 
 Move MCTSearch::get_best_move(Position& pos) {
-    if (pos.open_.len_ >= 30) {
+    if (pos.open_.len_ >= 32) {
         std::pair<Real, Move> search_result = pos.get_best_move();
         //fprintf(stderr, "Eval = %.5lf\n", search_result.first);
         return search_result.second;

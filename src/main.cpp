@@ -76,5 +76,5 @@ int main(int argc, char** argv) {
 // EventHorizon3_0_1: time usage
 // EventHorizon3_0_2: tune UCB_C
 // EventHorizon3_0_3: make opening heuristic calculation more efficient and more optimistic
-// EventHorizon4_0_0: store AMAF information in every node in preparation for implementing RAVE 
+// EventHorizon4_0_0: implement RAVE, modify default policy, alter solver move ordering 
 

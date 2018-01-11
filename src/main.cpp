@@ -81,4 +81,6 @@ int main(int argc, char** argv) {
 // EventHorizon3_0_3: make opening heuristic calculation more efficient and more optimistic
 // EventHorizon4_0_0: implement RAVE, modify default policy, alter solver move ordering 
 // EventHorizon4_0_1: modify memory allocation to be more time and space efficient 
+// EventHorizon4_0_2: fix bugs related to accelerated win detection
+
 

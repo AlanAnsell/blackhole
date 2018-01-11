@@ -203,6 +203,8 @@ public:
     void find_n_ways(U32 stone_index) const;
 
 	Real calculate_win_prob(Value alpha, U32 stone_index) const;
+
+    Move get_best_winning_move();
   
     std::pair<Real, Move> get_best_alpha_move(Value alpha);
 

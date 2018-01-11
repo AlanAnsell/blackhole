@@ -89,11 +89,12 @@ MCTNode * MCTNode::select(Position& pos) {
     }
 
     if (best_node == NULL) {
-/*#ifdef DEBUG_
-        fprintf(stderr, "select returning this node\n");
-        fflush(stderr);
+#ifdef DEBUG_
+        //fprintf(stderr, "select returning null node\n");
+        //fflush(stderr);
+        assert(children_.size() > 0);
         assert(is_now_fully_explored());
-#endif*/
+#endif
         fully_explored_ = true;
         return this;
     }
@@ -174,8 +175,6 @@ void MCTNode::simulate(Position& pos) {
 #ifdef DEBUG_
     assert(! fully_explored_);
 #endif
-    //fprintf(stderr, "Simulating\n");
-    //fflush(stderr);
     MCTNode * search_root = this;
     MCTNode * new_search_root;
     U32 move_count = 0, depth = 0, i;
@@ -193,26 +192,15 @@ void MCTNode::simulate(Position& pos) {
         depth++;
     }
     
-    /*if (! search_root->fully_explored_) { 
-        new_search_root = search_root->expand(pos);
-#ifdef DEBUG_
-        assert(new_search_root != NULL && new_search_root != search_root);
-#endif
-        search_root = new_search_root;
-        simulation[move_count] = search_root->move_;
-        move_count++;
-        depth++;
-        pos.make_move(search_root->move_);
-    }*/
-    U32 result;
-    if (search_root->fully_explored_)
-        result = (search_root->val_ == 1.0);
-    else {
+    U32 result = NO_RESULT;
+    if (! search_root->fully_explored_) {
         result = search_root->playout(pos, move_count);
         search_root->expanded_ = true;
         search_root = search_root->add_child(pos, simulation[depth]);
         pos.make_move(simulation[depth]);
         depth++;
+    } else {
+        result = (search_root->val_ == 1.0);
     }
 
     while (search_root != NULL) {
@@ -229,8 +217,12 @@ void MCTNode::simulate(Position& pos) {
                 if (search_root->children_[i]->val_ * pos.m_ > search_root->val_)
                     search_root->val_ = search_root->children_[i]->val_ * pos.m_;
             search_root->val_ *= pos.m_;
+            result = (search_root->val_ == 1.0);
         }
         if (! search_root->fully_explored_) {
+#ifdef DEBUG_
+            assert(result != NO_RESULT);
+#endif
             search_root->n_red_wins_ += result;
             search_root->n_playouts_++;
             search_root->val_ = Real(search_root->n_red_wins_) / Real(search_root->n_playouts_);
@@ -380,7 +372,6 @@ MCTNode * MCTSearch::get_or_make_root(Value alpha, const Position& pos) {
     if (roots_[index] == NULL) {
         roots_[index] = get_free();
         roots_[index]->init(NULL, pos, Move(), alpha);
-        roots_[index]->fully_explored_ = false;
     }
     return roots_[index];
 }
@@ -446,24 +437,21 @@ Move MCTSearch::get_best_move(Position& pos) {
         if (pos.open_.len_ <= solver_start && ! root->solve_attempted_ && time_now - start_micros < solver_time)
             root->attempt_solve(pos, table_, solver_time - time_now + start_micros, false);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
-            //fprintf(stderr, "Simulation %u\n", root->n_playouts_);
-            //fflush(stderr);
             root->simulate(pos);
             n_playouts++;
         } 
         if (root->fully_explored_) {
             if (root->val_ == 0.0 && current_alpha_ > MIN_RESULT) {
                 current_alpha_--;
-                if (get_or_make_root(current_alpha_, pos)->fully_explored_)
-                    break;
             } else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT) {
                 current_alpha_++;
-                if (get_or_make_root(current_alpha_, pos)->fully_explored_)
-                    break;
             } else {
                 fprintf(stderr, "MIN/MAX RESULT achieved\n");
                 break;
             }
+            if (roots_[current_alpha_ + MAX_RESULT] != NULL &&
+                    roots_[current_alpha_ + MAX_RESULT]->fully_explored_)
+                break;
         } else {
             if (root->val_ >= TARGET_INCREMENT_THRESH[pos.turn_] && current_alpha_ < MAX_RESULT)
                 current_alpha_++;
@@ -482,31 +470,24 @@ Move MCTSearch::get_best_move(Position& pos) {
     while (time_now - start_micros < move_time) {
         //if (pos.open_.len_ <= solver_start && ! root->solve_attempted_)
         //    root->attempt_solve(pos, table_);
+        root = get_or_make_root(current_alpha_, pos);
         for (i = 0; i < 100 && ! root->fully_explored_; i++) {
-            //fprintf(stderr, "Simulation %u\n", root->n_playouts_);
-            //fflush(stderr);
             root->simulate(pos);
             n_playouts++;
         } 
         if (root->fully_explored_) {
             if (root->val_ == 0.0 && current_alpha_ > MIN_RESULT) {
                 current_alpha_--;
-                pos.set_alpha(current_alpha_);
-                root = get_or_make_root(current_alpha_, pos);
-                if (root->fully_explored_) {
-                    done = true;
-                    break;
-                }
             } else if (root->val_ == 1.0 && current_alpha_ < MAX_RESULT) {
                 current_alpha_++;
-                pos.set_alpha(current_alpha_);
-                root = get_or_make_root(current_alpha_, pos);
-                if (root->fully_explored_) {
-                    done = true;
-                    break;
-                }
             } else {
                 fprintf(stderr, "MIN/MAX RESULT achieved\n");
+                break;
+            }
+            pos.set_alpha(current_alpha_);
+            if (roots_[current_alpha_ + MAX_RESULT] != NULL &&
+                    roots_[current_alpha_ + MAX_RESULT]->fully_explored_) {
+                done = true;
                 break;
             }
         }
@@ -530,7 +511,10 @@ Move MCTSearch::get_best_move(Position& pos) {
         
     if (root->fully_explored_) {
         fprintf(stderr, "Search tree fully explored\n");
-        return root->get_highest_value_move(pos);
+        if (root->solved_ || root->children_.size() > 0)
+            return root->get_highest_value_move(pos);
+        else
+            return pos.get_best_winning_move();
     }
 
     return root->get_most_played_move();

@@ -458,6 +458,45 @@ Real Position::calculate_win_prob(Value alpha, U32 stone_index) const {
 }
 
 
+Move Position::get_best_winning_move() {
+    U32 winner = RED;
+    if (is_winning(RED))
+        winner = RED;
+    else if (is_winning(BLUE))
+        winner = BLUE;
+#ifdef DEBUG_
+    else
+        assert(false);
+#endif
+    U32 n_stones = n_stones_[turn_];
+    Value * stones = stones_[turn_];
+    Move best_move;
+    Real best_value = -1000.0;
+    for (U32 i = 0; i < open_.len_; i++) {
+        U32 cell_id = open_.val_[i];
+        for (U32 j = 0; j < n_stones; j++) {
+            Value stone_value = stones[j] * m_;
+            Move move(cell_id, stone_value);
+            make_move(move);
+            bool still_winning = is_winning(winner);
+            Real value = calculate_expectation();
+            unmake_move(move);
+            if (still_winning) {
+                value *= m_;
+                if (value > best_value) {
+                    best_move = move;
+                    best_value = value;
+                }
+            }
+        }
+    }
+#ifdef DEBUG_
+    assert(best_value > -1000.0);
+#endif
+    return best_move;
+}
+
+
 std::pair<Real, Move> Position::get_best_alpha_move(Value alpha) {
     U32 i, j;
     Value * stones = stones_[turn_];
@@ -930,17 +969,17 @@ std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter
     }
     std::sort(move_infos.begin(), move_infos.end());
    
-#ifdef DEBUG_
+/*#ifdef DEBUG_
     fprintf(stderr, "Solving: alpha = %d\n", alpha_);
-#endif
+#endif*/
     std::vector<Move> winning_moves;
     for (i = 0; i < move_infos.size(); i++) {
         move = move_infos[i].move_;
-#ifdef DEBUG_
+/*#ifdef DEBUG_
         char move_str[10];
         move.to_str(move_str);
         fprintf(stderr, "%s\n", move_str);
-#endif
+#endif*/
         Value stone_number = move.stone_value_ * m_;
         U32 shift = hash_info.stone_shift_[turn_][stone_number];
         U32 cell_index = hash_info.cell_index_[move.cell_];

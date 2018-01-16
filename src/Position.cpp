@@ -642,7 +642,7 @@ void Position::get_all_moves(std::vector<Move>& moves) {
 }
 
 
-bool Position::is_reasonable_move(U32 cell_index, U32 stone_index) {
+bool Position::is_reasonable_move(U32 cell_index, U32 stone_index) const {
     U32 cell_id = open_.val_[cell_index];
     Value stone_number = stones_[turn_][stone_index];
     //Value stone_value = m_ * stone_number;
@@ -809,213 +809,32 @@ void Position::get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<
 }
 
 
-struct MoveInfo {
-    Move move_;
-    int swing_;
-
-    MoveInfo() {}
-
-    MoveInfo(const Move& move, int swing): move_(move), swing_(swing) {}
-
-    bool operator < (const MoveInfo& other) const {
-        if (move_.stone_value_ != other.move_.stone_value_)
-            return abs(move_.stone_value_) > abs(other.move_.stone_value_);
-        if (swing_ != other.swing_)
-            return swing_ > other.swing_;
-        return move_.cell_ < other.move_.cell_;
-    }
-};
-
+#ifdef SOLVER_IMPL_
+#include SOLVER_IMPL_
+#else
+#include "solver.h"
+#endif
 
 void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& amaf) {
     U32 n_stones = n_stones_[turn_];
     stone_index = n_stones;
-    U32 i, j;
+    U32 i;
     while (stone_index > 0) {
         stone_index--;
         std::vector<Move> moves;
         get_all_reasonable_moves_with_stone(stone_index, moves);
-        std::vector<MoveInfo> move_infos(moves.size());
-        Move move;
-        for (i = 0; i < moves.size(); i++) {
-            move = moves[i];
-            U32 cell_id = move.cell_;
-            int swing = 0;
-            U64 mask = MASK(cell_id);
-            if (dead_[turn_] & mask)
-                swing = -1;
-            else if (dead_[1 - turn_] & mask)
-                swing = 1;
-            List& adj = adj_[cell_id];
-            for (j = 0; j < adj.len_; j++) {
-                U32 adj_id = adj.val_[j];
-                U64 adj_mask = MASK(adj_id);
-                if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
-                    swing++;
-            }
-            move_infos[i] = MoveInfo(move, swing);
-        }
+        std::vector<MoveInfo> move_infos;
+        for (i = 0; i < moves.size(); i++)
+            add_solver_move(moves[i], move_infos);
         std::sort(move_infos.begin(), move_infos.end());
-        for (i = 0; i < moves.size(); i++) {
-            move = move_infos[i].move_;
+        for (i = 0; i < move_infos.size(); i++) {
+            Move move = move_infos[i].move_;
             cell_index = open_.loc_[move.cell_];
             if (! amaf.is_played(cell_index, stone_index))
                 return;
         }
     }
     cell_index = NO_CELL;
-}
-
-
-U32 Position::solve(long long end_time, U32& counter, U32& hash_hits,
-        HashTable& table, HashInfo& hash_info, U64 stone_masks[2]) {
-    counter++;
-    if (counter % 1000 == 0 && get_time() > end_time)
-        return TIME_ELAPSED;
-    if (is_winning(RED))
-        return RED;
-    if (is_winning(BLUE))
-        return BLUE;
-    U32 hash_result = table.find(stone_masks[0], stone_masks[1]);
-    if (hash_result != NO_HASH_ENTRY) {
-        hash_hits++;
-        return hash_result;
-    }
-    U64 child_stone_masks[2];
-    child_stone_masks[0] = stone_masks[0];
-    child_stone_masks[1] = stone_masks[1];
-    std::vector<Move> moves;
-    get_all_reasonable_moves(moves);
-    std::vector<MoveInfo> move_infos;
-    U32 i, j;
-    U32 op = 1 - turn_;
-    for (i = 0; i < moves.size(); i++) {
-        Move move = moves[i];
-        U32 cell_id = move.cell_;
-        U64 mask = MASK(cell_id);
-        int swing = 0;
-        if (dead_[turn_] & mask)
-            swing = -1;
-        else if (dead_[op] & mask)
-            swing = 1;
-        List& adj = adj_[cell_id];
-        for (j = 0; j < adj.len_; j++) {
-            U32 adj_id = adj.val_[j];
-            U64 adj_mask = MASK(adj_id);
-            if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
-                swing++;
-        }
-        move_infos.push_back(MoveInfo(move, swing));
-    }
-    std::sort(move_infos.begin(), move_infos.end());
-    U32 optimal_result = op;
-    for (i = 0; i < move_infos.size(); i++) {
-        Move move = move_infos[i].move_;
-        Value stone_number = move.stone_value_ * m_;
-        U32 shift = hash_info.stone_shift_[turn_][stone_number];
-        U32 cell_index = hash_info.cell_index_[move.cell_];
-        U64 move_mask = ((U64)cell_index << (U64)shift);
-        child_stone_masks[turn_] = stone_masks[turn_] | move_mask;
-        make_move(move);
-        U32 result = solve(end_time, counter, hash_hits, table, hash_info, child_stone_masks);
-        unmake_move(move);
-        if (result == TIME_ELAPSED)
-            return TIME_ELAPSED;
-        if (result == turn_) {
-            optimal_result = turn_;
-            break;
-        }
-    }
-    table.add(stone_masks[0], stone_masks[1], optimal_result);
-    return optimal_result;
-}
-
-
-std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter, U32& hash_hits,
-        bool break_ties, HashTable& table) {
-    table.init();
-    HashInfo hash_info(*this);
-    U64 stone_masks[2] = {0};
-    U64 child_stone_masks[2];
-    child_stone_masks[0] = stone_masks[0];
-    child_stone_masks[1] = stone_masks[1];
-    std::vector<Move> moves;
-    get_all_reasonable_moves(moves);
-    
-    std::vector<MoveInfo> move_infos;
-    U32 i, j;
-    U32 op = 1 - turn_;
-    U64 opp_controls = controls_;
-    if (turn_ == BLUE)
-        opp_controls = ~opp_controls;
-    Move move;
-    for (i = 0; i < moves.size(); i++) {
-        move = moves[i];
-        U32 cell_id = move.cell_;
-        U64 mask = MASK(cell_id);
-        int swing = 0;
-        if (dead_[turn_] & mask)
-            swing = -1;
-        else if (dead_[op] & mask)
-            swing = 1;
-        List& adj = adj_[cell_id];
-        for (j = 0; j < adj.len_; j++) {
-            U32 adj_id = adj.val_[j];
-            U64 adj_mask = MASK(adj_id);
-            if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
-                swing++;
-        }
-        move_infos.push_back(MoveInfo(move, swing));
-    }
-    std::sort(move_infos.begin(), move_infos.end());
-   
-/*#ifdef DEBUG_
-    fprintf(stderr, "Solving: alpha = %d\n", alpha_);
-#endif*/
-    std::vector<Move> winning_moves;
-    for (i = 0; i < move_infos.size(); i++) {
-        move = move_infos[i].move_;
-/*#ifdef DEBUG_
-        char move_str[10];
-        move.to_str(move_str);
-        fprintf(stderr, "%s\n", move_str);
-#endif*/
-        Value stone_number = move.stone_value_ * m_;
-        U32 shift = hash_info.stone_shift_[turn_][stone_number];
-        U32 cell_index = hash_info.cell_index_[move.cell_];
-        U64 move_mask = ((U64)cell_index << (U64)shift);
-        child_stone_masks[turn_] = stone_masks[turn_] | move_mask;
-        make_move(move);
-        U32 result = solve(end_time, counter, hash_hits, table, hash_info, child_stone_masks);
-        unmake_move(move);
-        if (result == TIME_ELAPSED)
-            return std::pair<U32, Move>(TIME_ELAPSED, Move());
-        if (result == turn_) {
-            if (break_ties)
-                winning_moves.push_back(move);
-            else
-                return std::pair<U32, Move>(turn_, move);
-        }
-    }
-    
-    if (winning_moves.size()) {
-        fprintf(stderr, "%u optimal moves\n", (U32)winning_moves.size());
-        Move best_move;
-        Real best_val = -1000.0;
-        for (i = 0; i < winning_moves.size(); i++) {
-            move = winning_moves[i];
-            make_move(move);
-            Real val = calculate_expectation();
-            unmake_move(move);
-            val *= m_;
-            if (val > best_val) {
-                best_move = move;
-                best_val = val;
-            }
-        }
-        return std::pair<U32, Move>(turn_, best_move);
-    }
-    return std::pair<U32, Move>(1 - turn_, moves[0]);
 }
 
 

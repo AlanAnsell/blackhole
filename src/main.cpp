@@ -82,5 +82,6 @@ int main(int argc, char** argv) {
 // EventHorizon4_0_0: implement RAVE, modify default policy, alter solver move ordering 
 // EventHorizon4_0_1: modify memory allocation to be more time and space efficient 
 // EventHorizon4_0_2: fix bugs related to accelerated win detection
+// EventHorizon4_1_1: improve solver and (hopefully) fix some crashes. 
 
 

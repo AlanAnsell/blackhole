@@ -86,7 +86,9 @@ const U32 index64[64] = {
 
 
 void init() {
-	fprintf(stderr, "R %s %s\n", ENGINE_NAME, VERSION_NUMBER);
+#ifndef SOLVER_IMPL_
+    fprintf(stderr, "R %s %s\n", ENGINE_NAME, VERSION_NUMBER);
+#endif
 #ifndef DEBUG_
     fflush(stderr);
     srand(time(NULL));

@@ -155,6 +155,8 @@ public:
 
 };
 
+class MoveInfo;
+
 class Position {
 public:
     List open_;
@@ -220,11 +222,15 @@ public:
 
     void get_all_moves(std::vector<Move>& moves);
 
-    bool is_reasonable_move(U32 cell_index, U32 stone_index);
+    bool is_reasonable_move(U32 cell_index, U32 stone_index) const;
 
     void get_all_reasonable_moves(std::vector<Move>& moves);
 
     void get_all_reasonable_moves_with_stone(U32 stone_index, std::vector<Move>& moves);
+
+    bool add_solver_move(const Move& move, std::vector<MoveInfo>& moves);
+
+    bool get_solver_moves(std::vector<MoveInfo>& moves, bool ignore_killer);
 
     void get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& amaf);
 

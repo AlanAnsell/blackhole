@@ -43,9 +43,11 @@ public:
 
     bool is_now_fully_explored();
 
+    bool is_playable();
+
     void generate_move(U32& cell_index, U32& stone_index, Position& pos);
 
-    MCTNode * expand(Position& pos);
+    //MCTNode * expand(Position& pos);
 
     bool playout(Position& pos, U32& move_count);
 
@@ -83,6 +85,8 @@ public:
     MCTSearch(const Position& pos, Value alpha);
 
     ~MCTSearch();
+
+    bool no_playable_move();
 
     MCTNode * select_alpha(const Position& pos);
 

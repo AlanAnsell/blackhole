@@ -11,7 +11,7 @@ Move::Move(char * move_str, U32 turn) {
 }
 
 
-void Move::to_str(char * str) {
+void Move::to_str(char * str) const {
     char cell_str[5];
     cell_id_to_name(cell_, cell_str);
     sprintf(str, "%s=%d", cell_str, abs(stone_value_));
@@ -82,7 +82,25 @@ void Position::unfill(U32 cell_id, Value stone_value) {
 }
 
 
+bool Position::is_legal(const Move& move) {
+    return move.cell_ >= 0 && move.cell_ < N_CELLS &&
+            (open_mask_ & MASK(move.cell_)) &&
+            abs(move.stone_value_) >= 1 && abs(move.stone_value_) <= N_STONES &&
+            (stone_masks_[turn_] & (1 << (abs(move.stone_value_) - 1)));
+}
+
+
 void Position::make_move(const Move& move) {
+#ifdef DEBUG_
+    if (! is_legal(move)) { 
+        print(stderr);
+        char move_str[20];
+        move.to_str(move_str);
+        fprintf(stderr, "%s\n", move_str);
+        fflush(stderr);
+        assert(false);
+    }
+#endif
     U32 cell_id = move.cell_;
     Value stone_number = m_ * move.stone_value_;
     Value * stones = stones_[turn_];
@@ -188,15 +206,26 @@ void Position::unmake_move(const Move& move) {
     open_.readd(cell_id); 
     
     unfill(cell_id, move.stone_value_);
-    if (controls_ & cell_mask)
-        n_controls_[BLUE]++;
-    else
+    if (value_[cell_id] >= alpha_) {
+        controls_ &= ~cell_mask;
         n_controls_[RED]++;
-    for (U32 p = 0; p < 2; p++) {
-        if (dead_[p] & cell_mask) {
+    } else {
+        controls_ |= cell_mask;
+        n_controls_[BLUE]++;
+    }
+    //if (controls_ & cell_mask)
+    //    n_controls_[BLUE]++;
+    //else
+    //    n_controls_[RED]++;
+    U32 p;
+    for (p = 0; p < 2; p++) {
+        if (is_dead(cell_id, p)) {
             n_dead_[p]++;
-            if (stale_[p] & cell_mask)
-                n_stale_[p]++;
+            dead_[p] |= cell_mask;
+            //if (stale_[p] & cell_mask)
+            //    n_stale_[p]++;
+        } else {
+            dead_[p] &= ~cell_mask;
         }
     }
     List& adj = adj_[cell_id];
@@ -214,22 +243,24 @@ void Position::unmake_move(const Move& move) {
     
     for (i = 0; i < open_.len_; i++) {
         U32 open_id = open_.val_[i];
-        U64 open_mask = MASK(open_id);
-        if ((dead_[RED] & open_mask)) {
-            if (! is_dead(open_id, RED)) {
-                n_dead_[RED]--;
-                dead_[RED] ^= open_mask;
-            }
-        } else if ((dead_[BLUE] & open_mask)) {
-            if (! is_dead(open_id, BLUE)) {
-                n_dead_[BLUE]--;
-                dead_[BLUE] ^= open_mask;
+        if (open_id != cell_id) {
+            U64 open_mask = MASK(open_id);
+            if ((dead_[RED] & open_mask)) {
+                if (! is_dead(open_id, RED)) {
+                    n_dead_[RED]--;
+                    dead_[RED] ^= open_mask;
+                }
+            } else if ((dead_[BLUE] & open_mask)) {
+                if (! is_dead(open_id, BLUE)) {
+                    n_dead_[BLUE]--;
+                    dead_[BLUE] ^= open_mask;
+                }
             }
         }
     }
 
     U64 dead = open_mask_ & (dead_[RED] | dead_[BLUE]);
-    U64 stale = open_mask_ & (stale_[RED] | stale_[BLUE]);
+    U64 stale = open_mask_ & (stale_[RED] | stale_[BLUE]) & (~cell_mask);
     U64 stale_it = stale;
     while (stale_it) {
         U64 lsb = LSB(stale_it);
@@ -252,6 +283,22 @@ void Position::unmake_move(const Move& move) {
                     n_stale_[BLUE]--;
                 }
             }
+        }
+    }
+    for (p = 0; p < 2; p++) {
+        bool is_stale = true;
+        if (dead_[p] & cell_mask) {
+            U64 adj_mask = ADJ_MASK[cell_id] & open_mask_;
+            if ((adj_mask & dead) != adj_mask)
+                is_stale = false;
+        } else {
+            is_stale = false;
+        }
+        if (is_stale) {
+            stale_[p] |= cell_mask;
+            n_stale_[p]++;
+        } else {
+            stale_[p] &= ~cell_mask;
         }
     }
 #ifdef DEBUG_
@@ -308,7 +355,7 @@ Move Position::get_default_policy_move() {
     for (i = 0; i < open_.len_; i++) {
         tickets[i] = 0;
         cell_id = open_.val_[i];
-        U64 mask = (1LL << (U64)cell_id);
+        U64 mask = MASK(cell_id);
         if ((stale_[RED] & mask) || (stale_[BLUE] & mask)) {
             Value stale_val = m_ * value_[cell_id];
             if (stale_val < best_stale_val) {
@@ -839,9 +886,10 @@ void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& am
 
 
 bool Position::is_dead(U32 cell_id, U32 p) {
-    Value * other_power = power_[1 - p];
+    U32 op = 1 - p;
+    Value * other_power = power_[op];
     Value value = value_[cell_id];
-    U32 n_adj = adj_[cell_id].len_;
+    U32 n_adj = std::min(n_stones_[op], adj_[cell_id].len_);
     Value worst_val = parity[p] * (value + other_power[n_adj]);
     return (worst_val >= parity[p] * (alpha_ - OFFSET[p]));
 }
@@ -904,14 +952,14 @@ void Position::set_alpha(Value alpha) {
         mask = MASK(cell_id);
         if (value >= alpha_) {
             n_controls_[RED]++;
-            if (value + power_[BLUE][n_adj] >= alpha_) {
+            if (value + power_[BLUE][std::min(n_adj, n_stones_[BLUE])] >= alpha_) {
                 n_dead_[RED]++;
                 dead_[RED] |= mask;
             }
         } else {
             controls_ |= mask;
             n_controls_[BLUE]++;
-            if (value + power_[RED][n_adj] < alpha_) {
+            if (value + power_[RED][std::min(n_adj, n_stones_[RED])] < alpha_) {
                 n_dead_[BLUE]++;
                 dead_[BLUE] |= mask;
             }

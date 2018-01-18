@@ -62,7 +62,7 @@ public:
 
     Move(char * move_str, U32 turn);
 
-    void to_str(char * str);
+    void to_str(char * str) const;
 
     bool operator < (const Move& other) const;
 };
@@ -191,6 +191,8 @@ public:
     void fill(U32 cell_id, Value stone_value);
 
     void unfill(U32 cell_id, Value stone_value);
+
+    bool is_legal(const Move& move);
 
     void make_move(const Move& move);
     

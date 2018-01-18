@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
         pos.make_move(Move(move_str, pos.turn_));
 	Value alpha = 0;
     while (pos.open_.len_ > 1) {
-        fprintf(stderr, "Time at start of loop: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
+        fprintf(stderr, "Time left: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
 #ifdef DEBUG_
         assert(n_free == N_MCT_NODES);
 #endif
@@ -39,15 +39,11 @@ int main(int argc, char** argv) {
         alpha = search.current_alpha_;
         fprintf(stderr, "Used %u nodes\n", N_MCT_NODES - n_free);
         fprintf(stderr, "Used %u AMAF records\n", amaf_pointer);
-        fprintf(stderr, "Time after search: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
-        fflush(stderr);
 		pos.make_move(move);
         move.to_str(move_str);
 		send_move(move_str);
 		get_move(move_str);
         pos.make_move(Move(move_str, pos.turn_));
-        fprintf(stderr, "Time at end of loop: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
-        fflush(stderr);
 	}
 	return 0;
 }
@@ -83,5 +79,6 @@ int main(int argc, char** argv) {
 // EventHorizon4_0_1: modify memory allocation to be more time and space efficient 
 // EventHorizon4_0_2: fix bugs related to accelerated win detection
 // EventHorizon4_1_1: improve solver and (hopefully) fix some crashes. 
+// EventHorizon4_1_7: fix bugs relating to accessing invalid power array entries and root selection 
 
 

@@ -48,12 +48,8 @@ void AMAFTable::play(U32 cell_index, U32 stone_index) {
 #ifdef DEBUG_
     assert(! record.played_);
 #endif
-    if (record.n_playouts_ != 0) {
-#ifdef DEBUG_
-        assert(record.played_ == 0);
-#endif
+    if (record.n_playouts_ != 0)
         pop_heap();
-    }
     record.played_ = true;
 }
 
@@ -91,6 +87,9 @@ void AMAFTable::update(U32 cell_index, U32 stone_index, bool win) {
     } else {
         record.n_wins_ += win;
         record.n_playouts_++;
+#ifdef DEBUG_
+        assert(record.n_playouts_ < 60000);
+#endif
         if (! record.played_)
             heap_update(&record, win);
     }

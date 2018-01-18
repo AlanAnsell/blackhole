@@ -39,7 +39,7 @@ void send_move(char * move_str) {
 void get_move(char * move_str) {
 	assert(scanf("%s", move_str));
 	time_started = get_time();
-	if (! strcmp(move_str, "Quit\n"))
+	if (! strcmp(move_str, "Quit"))
 		exit(0);
 }
 

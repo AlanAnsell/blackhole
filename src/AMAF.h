@@ -33,7 +33,7 @@ struct AMAFRecord {
 
 };
 
-#define N_AMAF_RECORDS 8000000
+#define N_AMAF_RECORDS 10000000
 
 extern AMAFRecord amaf_store[N_AMAF_RECORDS];
 extern U32 amaf_pointer;

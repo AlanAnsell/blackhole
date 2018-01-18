@@ -42,7 +42,7 @@ bool Position::add_solver_move(const Move& move, std::vector<MoveInfo>& moves) {
             U32 n_adj = adj_[adj_id].len_;
             if (n_adj != 1)
                 all_adj_isolated = false;
-            Value adj_value = (power_[op][n_adj-1] + value_[adj_id]) * m_;
+            Value adj_value = (power_[op][std::min(n_adj-1, n_stones_[op])] + value_[adj_id]) * m_;
             Value control_req = m_ * (alpha_ - OFFSET[turn_]);
             if (adj_value + stone_number >= control_req) {
                 kill++;

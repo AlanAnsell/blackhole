@@ -61,6 +61,8 @@ public:
 
     void print(FILE * f);
 
+    void print_pv(FILE * f);
+
 };
 
 
@@ -89,6 +91,8 @@ public:
     bool no_playable_move();
 
     MCTNode * select_alpha(const Position& pos);
+
+    void display_roots();
 
     MCTNode * get_or_make_root(Value alpha, const Position& pos);
 

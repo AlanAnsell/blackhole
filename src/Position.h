@@ -74,6 +74,7 @@ struct Snapshot {
     U32 open_[N_CELLS];
     U32 adj_[N_CELLS][MAX_DEGREE];
     U32 n_adj_[N_CELLS];
+    U32 effective_adj_[N_CELLS];
     Value value_[N_CELLS];
 
     Value stones_[2][N_STONES];
@@ -162,6 +163,7 @@ public:
     List open_;
     U64 open_mask_;
     List adj_[N_CELLS];
+    U32 effective_adj_[N_CELLS];
     Value value_[N_CELLS];
 
 	Value stones_[2][N_STONES];
@@ -242,13 +244,11 @@ public:
     std::pair<U32, Move> get_optimal_move(
             long long end_time, U32& counter, U32& hash_hits, bool break_ties, HashTable& table);
 
-    bool is_dead(U32 cell_id, U32 p);
-
     bool all_adj_dead(U32 cell_id);
 
     void find_stale_cells();
 
-    bool is_winning(U32 p) const;
+    void find_effective_adj();
 
     void set_alpha(Value alpha);
 
@@ -258,7 +258,97 @@ public:
 
     std::pair<U32, U32> get_cell_and_stone_indices(const Move& move);
 
-    void print(FILE * f);    
+    void print(FILE * f);
+        
+    inline bool is_dead(U32 cell_id, U32 p) const {
+        U32 op = 1 - p;
+        Value * other_power = power_[op];
+        Value value = value_[cell_id];
+        U32 n_adj = std::min(n_stones_[op], adj_[cell_id].len_);
+        Value worst_val = parity[p] * (value + other_power[n_adj]);
+        return (worst_val >= parity[p] * (alpha_ - OFFSET[p]));
+    }
+
+    inline bool is_winning(U32 p) const {
+        return n_dead_[p] > n_stones_[1 - p];
+    }
+
+    inline U32 get_non_stale_adj(const List& adj, U64 stale, U32 n) const {
+        U32 count = 0;
+        for (U32 i = 0; i < adj.len_; i++) {
+            U32 adj_id = adj.val_[i];
+            if (! (stale & MASK(adj_id))) {
+                if (count == n)
+                    return adj_id;
+                else
+                    count++;
+            }
+        }
+#ifdef DEBUG_
+        assert(false);
+#endif
+        return NO_CELL;
+    }
+
+    inline bool is_adj(const List& adj, U32 id2) const {
+        for (U32 i = 0; i < adj.len_; i++)
+            if (adj.val_[i] == id2)
+                return true;
+        return false;
+    }
+
+    inline bool is_valid(U32 cell_id, bool& duo) const {
+        if (effective_adj_[cell_id] > 2)
+            return true;
+        const List& adj = adj_[cell_id];
+        Value val = m_ * value_[cell_id];
+        U32 adj_id;
+        Value adj_val;
+        U64 stale = stale_[RED] | stale_[BLUE];
+        if (effective_adj_[cell_id] == 1) {
+            adj_id = get_non_stale_adj(adj, stale, 0);
+            adj_val = m_ * value_[adj_id];
+            if (effective_adj_[adj_id] == 1) {
+                duo = true;
+                return (val < adj_val) || (val == adj_val && cell_id < adj_id);
+            }
+            const List& adj_adj = adj_[adj_id];
+            U64 we_control;
+            if (turn_ == RED)
+                we_control = ~controls_;
+            else
+                we_control = controls_;
+            if (we_control & MASK(cell_id))
+                return false;
+            if (effective_adj_[adj_id] == 2) {
+                U32 adj_adj_id = get_non_stale_adj(adj_adj, stale, 0);
+                if (adj_adj_id == cell_id)
+                    adj_adj_id = get_non_stale_adj(adj_adj, stale, 1);
+                if (effective_adj_[adj_adj_id] == 1) {
+                    Value adj_adj_val = value_[adj_adj_id];
+                    return (val < adj_adj_val) || (val == adj_adj_val && cell_id < adj_adj_id);
+                }
+            }
+            return true;
+        }
+        if (effective_adj_[cell_id] == 2) {
+            U32 adj1_id = get_non_stale_adj(adj, stale, 0);
+            if (effective_adj_[adj1_id] == 2) {
+                U32 adj2_id = get_non_stale_adj(adj, stale, 1);
+                const List& adj2 = adj_[adj2_id];
+                if (effective_adj_[adj2_id] == 2 && is_adj(adj2, adj1_id)) {
+                    Value other_val = m_ * value_[adj1_id];
+                    if (other_val < val || (other_val == val && adj1_id < cell_id))
+                        return false;
+                    other_val = m_ * value_[adj2_id];
+                    if (other_val < val || (other_val == val && adj2_id < cell_id))
+                        return false;
+                }
+            }
+        }
+        return true;
+    }
+
 };
 
 class HashInfo {

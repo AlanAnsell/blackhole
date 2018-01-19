@@ -1,7 +1,7 @@
 #include "globals.h"
 
 const char * ENGINE_NAME = "EventHorizon";
-const char * VERSION_NUMBER = "4.0.0";
+const char * VERSION_NUMBER = "4.1.7";
 
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
@@ -90,7 +90,6 @@ void init() {
     fprintf(stderr, "R %s %s\n", ENGINE_NAME, VERSION_NUMBER);
 #endif
 #ifndef DEBUG_
-    fflush(stderr);
     srand(time(NULL));
 #endif
 
@@ -134,7 +133,7 @@ void init() {
             Value * power = STONE_POWER[p][mask];
             power[0] = 0;
             U32 i = 1;
-            for (int j = N_STONES - 1; j >= 0; j--) {
+            for (int j = N_STONES - 1; j >= 0 && i <= MAX_DEGREE; j--) {
                 if (mask & (1 << j)) {
                     power[i] = power[i - 1] + m * (j + 1);
                     i++;

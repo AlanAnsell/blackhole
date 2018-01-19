@@ -163,6 +163,7 @@ void Position::make_move(const Move& move) {
         }
     }
     find_stale_cells();
+    find_effective_adj();
 #ifdef DEBUG_
     assert((dead_[RED] & dead_[BLUE]) == 0LL);
     assert((stale_[RED] & stale_[BLUE]) == 0LL);
@@ -301,6 +302,8 @@ void Position::unmake_move(const Move& move) {
             stale_[p] &= ~cell_mask;
         }
     }
+
+    find_effective_adj();
 #ifdef DEBUG_
     assert((dead_[RED] & dead_[BLUE]) == 0LL);
     assert((stale_[RED] & stale_[BLUE]) == 0LL);
@@ -352,6 +355,7 @@ Move Position::get_default_policy_move() {
     U32 best_stale = NO_CELL;
     U32 cell_id;
     Value best_stale_val = 1000;
+    U32 op = 1 - turn_;
     for (i = 0; i < open_.len_; i++) {
         tickets[i] = 0;
         cell_id = open_.val_[i];
@@ -363,7 +367,8 @@ Move Position::get_default_policy_move() {
                 best_stale_val = stale_val;
             }
         } else {
-            if ((dead_[1-turn_] & mask) || (n_stones_[turn_] > n_dead_[1-turn_])) {
+            bool duo = false;
+            if (((dead_[op] & mask) || (n_stones_[turn_] > n_dead_[op])) && is_valid(cell_id, duo)) {
                 int swing = 0;
                 if (dead_[turn_] & mask)
                     swing = -1;
@@ -386,6 +391,8 @@ Move Position::get_default_policy_move() {
         total_tickets++;
     }
 #ifdef DEBUG_
+    if (total_tickets == 0)
+        print(stderr);
     assert(total_tickets > 0);
 #endif
      
@@ -693,48 +700,36 @@ bool Position::is_reasonable_move(U32 cell_index, U32 stone_index) const {
     U32 cell_id = open_.val_[cell_index];
     Value stone_number = stones_[turn_][stone_index];
     //Value stone_value = m_ * stone_number;
-    
-    U64 we_control = controls_;
-    if (turn_ == RED)
-        we_control = ~we_control;
-    
+   
+    U32 op = 1 - turn_; 
     U64 mask = MASK(cell_id);
-    if (stale_[1 - turn_] & mask)
+    if (stale_[op] & mask)
         //TODO: allow only the worst stale cell to be filled
         return stone_index == 0;
     if (stale_[turn_] & mask)
         return stone_index == 0 && dead_[turn_] == open_mask_;
 
-    U32 op = 1 - turn_;
     if (stone_index < n_stale_[op])
         return false;
     
     U32 n_stones = n_stones_[turn_];
-    if (n_stones == n_dead_[1 - turn_] && ! (dead_[1 - turn_] & mask))
+    if (n_stones == n_dead_[op] && ! (dead_[op] & mask))
         return false;
 
-    if (adj_[cell_id].len_ == 1) {
-        Value cell_value = value_[cell_id] * m_;
-        U32 adj_id = adj_[cell_id].val_[0];
-        if (adj_[adj_id].len_ == 1) {
-            Value adj_value = value_[adj_id] * m_;
-            if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
-                if (stone_index == 0)
-                    return true;
-                else {
-                    Value prev_stone_number;
-                    if (stone_index == 0)
-                        prev_stone_number = 0;
-                    else
-                        prev_stone_number = stones_[turn_][stone_index - 1];
-                    Value extra_req = m_ * (alpha_ - OFFSET[turn_]) - adj_value;
-                    return stone_number >= extra_req && prev_stone_number < extra_req;
-                }       
-            }
-        } else {
-            return ! (we_control & mask);
-        }
+    bool duo = false;
+    if (! is_valid(cell_id, duo))
+        return false;
+
+    if (duo) {
+        if (stone_index == 0)
+            return true;
+        U32 adj_id = get_non_stale_adj(adj_[cell_id], stale_[RED] | stale_[BLUE], 0);
+        Value adj_value = value_[adj_id] * m_;
+        Value prev_stone_number = stones_[turn_][stone_index - 1];
+        Value extra_req = m_ * (alpha_ - OFFSET[turn_]) - adj_value;
+        return stone_number >= extra_req && prev_stone_number < extra_req;
     }
+
     return true;
 }
  
@@ -745,6 +740,7 @@ void Position::get_all_reasonable_moves(std::vector<Move>& moves) {
     Value stone_value;
     Value best_stale_val = 1000;
     U32 best_stale = NO_CELL;
+    U32 op = 1 - turn_;
     U32 i, j;
     U64 we_control = controls_;
     if (turn_ == RED)
@@ -759,35 +755,28 @@ void Position::get_all_reasonable_moves(std::vector<Move>& moves) {
                 best_stale_val = cell_value;
             }
         } else {
-            if ((dead_[1-turn_] & mask) || (n_stones > n_dead_[1-turn_])) {
-                bool done = false;
-                if (adj_[cell_id].len_ == 1) {
-                    U32 adj_id = adj_[cell_id].val_[0];
-                    if (adj_[adj_id].len_ == 1) {
-                        done = true;
+            if ((dead_[op] & mask) || (n_stones > n_dead_[op])) {
+                bool duo = false;
+                if (is_valid(cell_id, duo)) {
+                    if (duo) {
+                        U32 adj_id = get_non_stale_adj(adj_[cell_id], stale_[RED] | stale_[BLUE], 0);
                         Value adj_value = value_[adj_id] * m_;
-                        if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
-                            stone_value = m_ * stones[0];
-                            moves.push_back(Move(cell_id, stone_value));
-                            Value control_req = m_ * (alpha_ - OFFSET[turn_]);
-                            if (adj_value + stones[0] < control_req) {
-                                Value extra = control_req - adj_value;
-                                for (j = 1; j < n_stones && stones[j] < extra; j++) {}
-                                if (j < n_stones) {
-                                    stone_value = m_ * stones[j];
-                                    moves.push_back(Move(cell_id, stone_value));
-                                }
-                            }       
-                        }
-                    } else {
-                        if (we_control & mask)
-                            done = true;
-                    }
-                }
-                if (! done) {
-                    for (j = n_stale_[1 - turn_]; j < n_stones; j++) {
-                        stone_value = m_ * stones[j];
+                        stone_value = m_ * stones[0];
                         moves.push_back(Move(cell_id, stone_value));
+                        Value control_req = m_ * (alpha_ - OFFSET[turn_]);
+                        if (adj_value + stones[0] < control_req) {
+                            Value extra = control_req - adj_value;
+                            for (j = 1; j < n_stones && stones[j] < extra; j++) {}
+                            if (j < n_stones) {
+                                stone_value = m_ * stones[j];
+                                moves.push_back(Move(cell_id, stone_value));
+                            }
+                        }       
+                    } else {
+                        for (j = n_stale_[op]; j < n_stones; j++) {
+                            stone_value = m_ * stones[j];
+                            moves.push_back(Move(cell_id, stone_value));
+                        }
                     }
                 }
             }
@@ -885,16 +874,6 @@ void Position::get_untried_move(U32& cell_index, U32& stone_index, AMAFTable& am
 }
 
 
-bool Position::is_dead(U32 cell_id, U32 p) {
-    U32 op = 1 - p;
-    Value * other_power = power_[op];
-    Value value = value_[cell_id];
-    U32 n_adj = std::min(n_stones_[op], adj_[cell_id].len_);
-    Value worst_val = parity[p] * (value + other_power[n_adj]);
-    return (worst_val >= parity[p] * (alpha_ - OFFSET[p]));
-}
-
-
 bool Position::all_adj_dead(U32 cell_id) {
     List& adj = adj_[cell_id];
     U32 n_adj = adj.len_;
@@ -930,8 +909,18 @@ void Position::find_stale_cells() {
 }
 
 
-bool Position::is_winning(U32 p) const {
-    return n_dead_[p] > n_stones_[1 - p];
+void Position::find_effective_adj() {
+    for (U32 i = 0; i < open_.len_; i++) {
+        U32 cell_id = open_.val_[i]; 
+        U32& effective_adj = effective_adj_[cell_id];
+        effective_adj = 0;
+        U64 non_stale_adj_mask = ADJ_MASK[cell_id] & open_mask_ &
+                (~stale_[RED]) & (~stale_[BLUE]);
+        while (non_stale_adj_mask) {
+            non_stale_adj_mask ^= LSB(non_stale_adj_mask);
+            effective_adj++;
+        }
+    }
 }
 
 
@@ -966,6 +955,7 @@ void Position::set_alpha(Value alpha) {
         }
     }
     find_stale_cells();
+    find_effective_adj();
 #ifdef DEBUG_
     assert((dead_[RED] & dead_[BLUE]) == 0LL);
     assert((stale_[RED] & stale_[BLUE]) == 0LL);
@@ -988,6 +978,7 @@ void Position::take_snapshot() {
         List& adj = adj_[cell_id];
         U32 n_adj = adj.len_;
         snapshot_.n_adj_[cell_id] = n_adj;
+        snapshot_.effective_adj_[cell_id] = effective_adj_[cell_id];
         for (j = 0; j < n_adj; j++)
             snapshot_.adj_[cell_id][j] = adj.val_[j];
     }
@@ -1024,6 +1015,7 @@ void Position::restore_snapshot() {
         value_[cell_id] = snapshot_.value_[cell_id];
         open_.val_[i] = cell_id;
         open_.loc_[cell_id] = i;
+        effective_adj_[cell_id] = snapshot_.effective_adj_[cell_id];
         U32 n_adj = snapshot_.n_adj_[cell_id];
         List& adj = adj_[cell_id];
         adj.len_ = n_adj; 
@@ -1079,9 +1071,14 @@ void Position::print(FILE * f) {
     fprintf(f, "Red:");
     for (i = 0; i < n_stones_[RED]; i++)
         fprintf(f, " %d", stones_[RED][i] * parity[RED]);
-    fprintf(stderr, "\nBlue:");
+    fprintf(f, "\nBlue:");
     for (i = 0; i < n_stones_[BLUE]; i++)
-        fprintf(stderr, " %d", stones_[BLUE][i] * parity[BLUE]);
-    fprintf(stderr, "\n");
+        fprintf(f, " %d", stones_[BLUE][i] * parity[BLUE]);
+    fprintf(f, "\n");
+    fprintf(f, "Alpha = %d\n", alpha_);
+    fprintf(f, "dead_[RED] = 0x%llu\n", dead_[RED]);
+    fprintf(f, "dead_[BLUE] = 0x%llu\n", dead_[BLUE]);
+    fprintf(f, "stale_[RED] = 0x%llu\n", stale_[RED]);
+    fprintf(f, "stale_[BLUE] = 0x%llu\n", stale_[BLUE]);
 }
 

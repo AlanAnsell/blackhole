@@ -80,5 +80,6 @@ int main(int argc, char** argv) {
 // EventHorizon4_0_2: fix bugs related to accelerated win detection
 // EventHorizon4_1_1: improve solver and (hopefully) fix some crashes. 
 // EventHorizon4_1_7: fix bugs relating to accessing invalid power array entries and root selection 
+// EventHorizon4_2_2: more intelligently detect unreasonable moves 
 
 

@@ -347,7 +347,7 @@ void MCTNode::print_pv(FILE * f) {
         MCTNode * best_child = NULL;
         for (U32 i = 0; i < curr->children_.size(); i++) {
             MCTNode * child = curr->children_[i];
-            if (child->n_playouts_ > most_visits) {
+            if (best_child == NULL || child->n_playouts_ > most_visits) {
                 best_child = child;
                 most_visits = child->n_playouts_;
             }

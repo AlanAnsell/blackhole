@@ -190,9 +190,24 @@ public:
 
 	Position(U32 blocked[N_BLOCKED_CELLS], Value alpha);
    
-    void fill(U32 cell_id, Value stone_value);
+    inline void fill(U32 cell_id, Value stone_value) {
+        List& adj = adj_[cell_id];
+        for (U32 i = 0; i < adj.len_; i++) {
+            U32 adj_id = adj.val_[i];
+            value_[adj_id] += stone_value;
+            adj_[adj_id].remove(cell_id);
+        }
+    }
 
-    void unfill(U32 cell_id, Value stone_value);
+
+    inline void unfill(U32 cell_id, Value stone_value) {
+        List& adj = adj_[cell_id];
+        for (U32 i = 0; i < adj.len_; i++) {
+            U32 adj_id = adj.val_[i];
+            value_[adj_id] -= stone_value;
+            adj_[adj_id].readd(cell_id);
+        }
+    }
 
     bool is_legal(const Move& move);
 
@@ -206,25 +221,9 @@ public:
 
     Move get_expectation_maximising_move();
 
-    void find_n_ways(U32 stone_index) const;
-
-	Real calculate_win_prob(Value alpha, U32 stone_index) const;
-
-    Move get_best_winning_move();
-  
-    std::pair<Real, Move> get_best_alpha_move(Value alpha);
-
-    std::pair<Real, Move> get_best_move();
-
     Real calculate_expectation() const;		
 
-    std::pair<Real, Move> search_expectation(U32 depth, Real a, Real b);
-
-    Real get_control_heuristic() const;
-
-    void get_moves_with_heuristic(std::vector<std::pair<Real, Move>>& moves);
-
-    void get_all_moves(std::vector<Move>& moves);
+    Move get_best_winning_move();
 
     bool is_reasonable_move(U32 cell_index, U32 stone_index) const;
 
@@ -246,20 +245,55 @@ public:
 
     bool all_adj_dead(U32 cell_id);
 
-    void find_stale_cells();
-
-    void find_effective_adj();
-
     void set_alpha(Value alpha);
 
     void take_snapshot();
 
     void restore_snapshot();
 
-    std::pair<U32, U32> get_cell_and_stone_indices(const Move& move);
-
     void print(FILE * f);
         
+    inline std::pair<U32, U32> get_cell_and_stone_indices(const Move& move) {
+        return std::pair<U32, U32>(open_.loc_[move.cell_],
+                                         stone_loc_[turn_][m_ * move.stone_value_]);
+    }
+
+    inline void find_stale_cells() {
+        U64 dead = open_mask_ & (dead_[RED] | dead_[BLUE]);
+        U64 dead_it = dead;
+        U64 stale = open_mask_ & (stale_[RED] | stale_[BLUE]);
+        while (dead_it) {
+            U64 lsb = LSB(dead_it);
+            dead_it ^= lsb;
+            if (! (stale & lsb)) {
+                U64 adj_mask = ADJ_MASK[INDEX(lsb)];
+                if ((dead & adj_mask) == (open_mask_ & adj_mask)) {
+                    if (dead_[RED] & lsb) {
+                        stale_[RED] |= lsb;
+                        n_stale_[RED]++;
+                    } else {
+                        stale_[BLUE] |= lsb;
+                        n_stale_[BLUE]++;
+                    }
+                }
+            }
+        }
+    }
+
+    inline void find_effective_adj() {
+        for (U32 i = 0; i < open_.len_; i++) {
+            U32 cell_id = open_.val_[i]; 
+            U32& effective_adj = effective_adj_[cell_id];
+            effective_adj = 0;
+            U64 non_stale_adj_mask = ADJ_MASK[cell_id] & open_mask_ &
+                    (~stale_[RED]) & (~stale_[BLUE]);
+            while (non_stale_adj_mask) {
+                non_stale_adj_mask ^= LSB(non_stale_adj_mask);
+                effective_adj++;
+            }
+        }
+    }
+
     inline bool is_dead(U32 cell_id, U32 p) const {
         U32 op = 1 - p;
         Value * other_power = power_[op];

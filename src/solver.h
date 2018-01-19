@@ -8,7 +8,7 @@ struct MoveInfo {
     MoveInfo(const Move& move, int kill, int adj):
             move_(move), kill_(kill), adj_(adj) {}
 
-    bool operator < (const MoveInfo& other) const {
+    inline bool operator < (const MoveInfo& other) const {
         if (kill_ != other.kill_)
             return kill_ > other.kill_;
         if (move_.stone_value_ != other.move_.stone_value_)
@@ -86,38 +86,31 @@ bool Position::get_solver_moves(std::vector<MoveInfo>& moves, bool ignore_killer
                 best_stale_val = cell_value;
             }
         } else {
-            if ((dead_[1-turn_] & mask) || (n_stones > n_dead_[1-turn_])) {
-                bool done = false;
-                if (adj_[cell_id].len_ == 1) {
-                    U32 adj_id = adj_[cell_id].val_[0];
-                    if (adj_[adj_id].len_ == 1) {
-                        done = true;
+            if ((dead_[op] & mask) || (n_stones > n_dead_[op])) {
+                bool duo = false;
+                if (is_valid(cell_id, duo)) {
+                    if (duo) {
+                        U32 adj_id = get_non_stale_adj(adj_[cell_id], stale_[RED] | stale_[BLUE], 0);
                         Value adj_value = value_[adj_id] * m_;
-                        if (cell_value < adj_value || (cell_value == adj_value && cell_id < adj_id)) {
-                            Value control_req = m_ * (alpha_ - OFFSET[turn_]);
-                            if (adj_value + stones[0] < control_req) {
-                                Value extra = control_req - adj_value;
-                                for (j = 1; j < n_stones && stones[j] < extra; j++) {}
-                                if (j < n_stones) {
-                                    stone_value = m_ * stones[j];
-                                    if (add_solver_move(Move(cell_id, stone_value), moves) && ! ignore_killer)
-                                        return true;
-                                }
+                        Value control_req = m_ * (alpha_ - OFFSET[turn_]);
+                        if (adj_value + stones[0] < control_req) {
+                            Value extra = control_req - adj_value;
+                            for (j = 1; j < n_stones && stones[j] < extra; j++) {}
+                            if (j < n_stones) {
+                                stone_value = m_ * stones[j];
+                                if (add_solver_move(Move(cell_id, stone_value), moves) && ! ignore_killer)
+                                    return true;
                             }
-                            stone_value = m_ * stones[0];
+                        }
+                        stone_value = m_ * stones[0];
+                        if (add_solver_move(Move(cell_id, stone_value), moves) && ! ignore_killer)
+                            return true;
+                    } else {
+                        for (j = n_stale_[op]; j < n_stones; j++) {
+                            stone_value = m_ * stones[j];
                             if (add_solver_move(Move(cell_id, stone_value), moves) && ! ignore_killer)
                                 return true;
                         }
-                    } else {
-                        if (we_control & mask)
-                            done = true;
-                    }
-                }
-                if (! done) {
-                    for (j = n_stale_[op]; j < n_stones; j++) {
-                        stone_value = m_ * stones[j];
-                        if (add_solver_move(Move(cell_id, stone_value), moves) && ! ignore_killer)
-                            return true;
                     }
                 }
             }

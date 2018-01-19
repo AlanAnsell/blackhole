@@ -512,16 +512,16 @@ void MCTSearch::display_roots() {
 Move MCTSearch::get_best_move(Position& pos) {
     Real time_left_r = (Real) time_left;
     Real use_proportion;
-    int moves_left = ((int)pos.open_.len_ - 16) / 2;
+    int moves_left = ((int)pos.open_.len_ - 18) / 2;
     if (moves_left < 1)
         use_proportion = 0.5;
     else {
         fprintf(stderr, "Expecting to make %d more moves before position solved\n", moves_left);
 #ifdef UNIFORM_TM
-        double use = (time_left_r - time_limit / 10.0) / (Real)moves_left;
+        double use = (time_left_r - time_limit / 8.0) / (Real)moves_left;
         use_proportion = use / time_left_r;
 #else
-        use_proportion = 1.0 - pow(((Real)time_limit / 10.0)  / time_left_r, 1.0 / (Real)moves_left);
+        use_proportion = 1.0 - pow(((Real)time_limit / 8.0)  / time_left_r, 1.0 / (Real)moves_left);
 #endif
     }
     long long move_time = (long long)(use_proportion * time_left_r);

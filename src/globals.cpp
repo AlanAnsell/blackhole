@@ -1,7 +1,7 @@
 #include "globals.h"
 
 const char * ENGINE_NAME = "EventHorizon";
-const char * VERSION_NUMBER = "4.1.7";
+const char * VERSION_NUMBER = "4.2.4";
 
 int parity[2] = {1, -1};
 Value OFFSET[2] = {0, 1};

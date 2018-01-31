@@ -3,6 +3,20 @@
 #include "MCTS.h"
 
 
+void analyse_pos(Position& pos) {
+    char move_str[10];
+    while (scanf("%s", move_str) == 1) {
+        Move move = move_from_str(move_str);
+        pos.make_move(move, false);
+    }
+    fprintf(stderr, "Analysing...\n");
+    fflush(stderr);
+    pos.print(stderr);
+    MCTSearch search(0);
+    search.analyse(pos);
+}
+
+
 int main(int argc, char** argv) {
     time_started = get_time();
     if (argc > 1) {
@@ -12,7 +26,11 @@ int main(int argc, char** argv) {
             time_left = (49 * time_limit) / 50;
         }
     }
-	init();
+	fprintf(stderr, "Before init\n");
+    fflush(stderr);
+    init();
+	fprintf(stderr, "After init\n");
+    fflush(stderr);
 	init_free_list();
     init_amaf_free_list();
     	
@@ -23,27 +41,40 @@ int main(int argc, char** argv) {
         blocked[i] = cell_name_to_id(cell_str);
     }
     
+	fprintf(stderr, "Making position\n");
+    fflush(stderr);
     Position pos(blocked, 0);
+	fprintf(stderr, "Made position\n");
+    fflush(stderr);
+    if (argc > 1 && ! strcmp(argv[1], "-a")) {
+        fprintf(stderr, "About to analyse\n");
+        fflush(stderr);
+        analyse_pos(pos);
+        return 0;
+    }
+    fprintf(stderr, "Didn't analyse\n");
+    fflush(stderr);
+
     char move_str[100];
     get_move(move_str);
     if (strcmp(move_str, "Start"))
-        pos.make_move(Move(move_str, pos.turn_));
+        pos.make_move(move_from_str(move_str), false);
 	Value alpha = 0;
     while (pos.open_.len_ > 1) {
         fprintf(stderr, "Time left: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
 #ifdef DEBUG_
         assert(n_free == N_MCT_NODES);
 #endif
-        MCTSearch search(pos, alpha);
+        MCTSearch search(alpha);
         Move move = search.get_best_move(pos);
         alpha = search.current_alpha_;
         fprintf(stderr, "Used %u nodes\n", N_MCT_NODES - n_free);
         fprintf(stderr, "Used %u AMAF records\n", amaf_pointer);
-		pos.make_move(move);
-        move.to_str(move_str);
+		pos.make_move(move, false);
+        move_to_str(move, move_str);
 		send_move(move_str);
 		get_move(move_str);
-        pos.make_move(Move(move_str, pos.turn_));
+        pos.make_move(move_from_str(move_str), false);
 	}
 	return 0;
 }

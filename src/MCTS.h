@@ -3,7 +3,7 @@
 
 #include "globals.h"
 #include "Position.h"
-#include "AMAF.h"
+#include "AMAF2.h"
 
 
 class MCTNode {
@@ -15,10 +15,19 @@ public:
     Real val_;
     U32 n_red_wins_;
     U32 n_playouts_;
-
+    
     bool fully_explored_;
     bool expanded_;
     bool all_children_generated_;
+    std::vector<Move> untried_children_;
+    //bool cached_child_;
+    //U32 cached_cell_index_;
+    //U32 cached_stone_index_;
+        
+    //bool get_untried_failed_;
+    int untried_stone_index_;
+    U64 valid_;
+    U64 duo_;
 
     U32 n_children_fully_explored_;
     std::vector<MCTNode*> children_;
@@ -30,16 +39,18 @@ public:
     U32 solver_hash_hits_;
     long long solver_time_;
 
-    AMAFTable amaf_;
+    std::vector<U32> tried_;
+    bool amaf_node_;
+    AMAFTable amaf_[2];
+    AMAFTable * my_amaf_;
 
-
-    void init(MCTNode * parent, const Position& pos, const Move& move, Value alpha);
+    void init(MCTNode * parent, const Position& pos, Move move, Value alpha, AMAFTable * my_amaf);
 
     void simulate(Position& pos);
     
     MCTNode * select(Position& pos);
 
-    MCTNode * add_child(Position& pos, const Move& move);
+    MCTNode * add_child(Position& pos, Move move);
 
     bool is_now_fully_explored();
 
@@ -58,6 +69,8 @@ public:
     Move get_highest_value_move(Position& pos);
 
     void dispose();
+
+    void print_most_played_moves(U32 n) const;
 
     void print(FILE * f);
 
@@ -84,17 +97,19 @@ public:
     Value current_alpha_;
     HashTable table_;
 
-    MCTSearch(const Position& pos, Value alpha);
+    MCTSearch(Value alpha);
 
     ~MCTSearch();
 
     bool no_playable_move();
 
-    MCTNode * select_alpha(const Position& pos);
+    MCTNode * select_alpha(const Position& pos, Real choose_target_thresh);
 
     void display_roots();
 
     MCTNode * get_or_make_root(Value alpha, const Position& pos);
+
+    void analyse(Position& pos);
 
     Move get_best_move(Position& pos);
 

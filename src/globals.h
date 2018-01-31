@@ -37,7 +37,7 @@ typedef double Real;
 extern const char * ENGINE_NAME;
 extern const char * VERSION_NUMBER;
 
-extern int parity[2];
+extern int PARITY[2];
 extern Value OFFSET[2];
 
 extern long long time_limit;
@@ -80,5 +80,8 @@ extern const Real TARGET_INCREMENT_THRESH[2];
 extern const Real TARGET_DECREMENT_THRESH[2];
 extern const Real CHOOSE_TARGET_THRESH[2];
 
-Real sigmoid(Real x);
+#define MAX_SIMS 60000
+extern Real SQRT[MAX_SIMS];
+extern Real SQRT_LOG[MAX_SIMS];
+
 #endif

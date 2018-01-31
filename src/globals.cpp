@@ -1,9 +1,9 @@
 #include "globals.h"
 
 const char * ENGINE_NAME = "EventHorizon";
-const char * VERSION_NUMBER = "4.2.4";
+const char * VERSION_NUMBER = "5.0.0";
 
-int parity[2] = {1, -1};
+int PARITY[2] = {1, -1};
 Value OFFSET[2] = {0, 1};
 
 #ifdef FAST_
@@ -85,6 +85,9 @@ const U32 index64[64] = {
 };
 
 
+Real SQRT[MAX_SIMS];
+Real SQRT_LOG[MAX_SIMS];
+
 void init() {
 #ifndef SOLVER_IMPL_
     fprintf(stderr, "R %s %s\n", ENGINE_NAME, VERSION_NUMBER);
@@ -128,7 +131,7 @@ void init() {
     }
 
     for (U32 p = 0; p < 2; p++) {
-        Value m = parity[p];
+        Value m = PARITY[p];
         for (U32 mask = 0; mask < (1 << N_STONES); mask++) {
             Value * power = STONE_POWER[p][mask];
             power[0] = 0;
@@ -142,12 +145,17 @@ void init() {
         }
     }
 
+    for (U32 i = 1; i < MAX_SIMS; i++) {
+        SQRT[i] = sqrt((Real)i);
+        SQRT_LOG[i] = sqrt(log((Real)i));
+    }
+
 }
 
 
 //const Real UCB_C = 0.1;
-const Real TARGET_INCREMENT_THRESH[2] = {0.45, 0.65};
-const Real TARGET_DECREMENT_THRESH[2] = {0.35, 0.55};
+const Real TARGET_INCREMENT_THRESH[2] = {0.45, 0.60};
+const Real TARGET_DECREMENT_THRESH[2] = {0.40, 0.55};
 const Real CHOOSE_TARGET_THRESH[2] = {0.4, 0.6};
 
 Real sigmoid(Real x) {

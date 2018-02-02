@@ -79,7 +79,7 @@ void MCTNode::get_best_from_amaf(U32& cell_id, U32& stone_index, Position& pos) 
 
 
 MCTNode * MCTNode::select(Position& pos) {
-    if (n_playouts_ >= 100)
+    if (n_playouts_ >= AMAF_SWITCH_THRESH)
         my_amaf_ = & amaf_[pos.turn_];
     MCTNode * best_node = NULL;
     Real best_node_value = -1000.0, child_val;
@@ -681,7 +681,7 @@ Move MCTSearch::get_best_move(Position& pos) {
                 break;
         } else {
             Real target_increment_thresh, target_decrement_thresh;
-            if (pos.open_.len_ >= 26) {
+            if (pos.open_.len_ >= 24) {
                 target_increment_thresh = TARGET_INCREMENT_THRESH[pos.turn_];
                 target_decrement_thresh = TARGET_DECREMENT_THRESH[pos.turn_];
             } else {
@@ -697,7 +697,7 @@ Move MCTSearch::get_best_move(Position& pos) {
     }
 
     Real red_choose_target_thresh;
-    if (pos.open_.len_ >= 26)
+    if (pos.open_.len_ >= 24)
         red_choose_target_thresh = CHOOSE_TARGET_THRESH[RED];
     else
         red_choose_target_thresh = 0.5;

@@ -270,10 +270,10 @@ public:
 
     void print(FILE * f) const;
         
-    inline std::pair<U32, U32> get_cell_and_stone_indices(Move move) {
+    /*inline std::pair<U32, U32> get_cell_and_stone_indices(Move move) {
         return std::pair<U32, U32>(open_.loc_[GET_CELL(move)],
                                          stone_loc_[turn_][GET_STONE_NUMBER(move)]);
-    }
+    }*/
 
     inline void find_stale_cells() {
         U64 dead = open_mask_ & (dead_[RED] | dead_[BLUE]);
@@ -438,8 +438,7 @@ public:
     }
 
     
-    inline bool is_reasonable_move(U32 cell_index, U32 stone_index, U64 valid, U64 duo) const {
-        U32 cell_id = open_.val_[cell_index];
+    inline bool is_reasonable_move(U32 cell_id, U32 stone_index, U64 valid, U64 duo) const {
         //Value stone_value = m_ * stone_number;
        
         //U32 op = 1 - turn_; 
@@ -459,7 +458,7 @@ public:
         if (! (valid & mask))
             return false;
         
-        if (cell_index == worst_stale_)
+        if (cell_id == worst_stale_)
             return stone_index == 0;
         //bool duo = false;
         //if (! is_valid(cell_id, duo))

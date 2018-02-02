@@ -3,7 +3,7 @@
 
 #include "globals.h"
 #include "Position.h"
-#include "AMAF2.h"
+#include "AMAF.h"
 
 
 class MCTNode {
@@ -39,12 +39,15 @@ public:
     U32 solver_hash_hits_;
     long long solver_time_;
 
-    std::vector<U32> tried_;
-    bool amaf_node_;
+    // tried_ is indexed first by cell ID, then by stone index
+    std::vector<U16> tried_;
     AMAFTable amaf_[2];
     AMAFTable * my_amaf_;
+    AMAFTable * par_amaf_;
 
     void init(MCTNode * parent, const Position& pos, Move move, Value alpha, AMAFTable * my_amaf);
+
+    void get_best_from_amaf(U32& cell_id, U32& stone_index, Position& pos);
 
     void simulate(Position& pos);
     
@@ -56,7 +59,7 @@ public:
 
     bool is_playable();
 
-    void generate_move(U32& cell_index, U32& stone_index, Position& pos);
+    void generate_move(U32& cell_id, U32& stone_index, Position& pos);
 
     //MCTNode * expand(Position& pos);
 
@@ -70,7 +73,9 @@ public:
 
     void dispose();
 
-    void print_most_played_moves(U32 n) const;
+    void print_rave_calc(char * S, Position& pos, MCTNode * child) const;
+
+    void print_most_played_moves(Position& pos, U32 n) const;
 
     void print(FILE * f);
 

@@ -158,6 +158,7 @@ const Real TARGET_INCREMENT_THRESH[2] = {0.45, 0.60};
 const Real TARGET_DECREMENT_THRESH[2] = {0.40, 0.55};
 const Real CHOOSE_TARGET_THRESH[2] = {0.4, 0.6};
 
-Real sigmoid(Real x) {
-    return 1.0 / (1.0 + exp(-x));
-}
+bool ANALYSE_WITH_SOLVER = false;
+bool ANALYSE = false;
+bool PLAYOUT = false;
+Value INIT_ALPHA = 0;

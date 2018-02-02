@@ -18,56 +18,55 @@ AMAFRecord * amaf_alloc(U32 n) {
 }
 
 
-void AMAFTable::init(U32 n_open, U32 n_stones) {
+void AMAFTable::init(U32 n_stones) {
     n_stones_ = n_stones;
-    n_open_ = n_open;
     amaf_.clear(); 
     list_.clear();
 }
 
 
-AMAFRecord * AMAFTable::cell_init(U32 cell_index) {
+AMAFRecord * AMAFTable::cell_init(U32 cell_id) {
 #ifdef DEBUG_
     assert(amaf_.size() > 0);
-    assert(amaf_[cell_index] == NULL);
+    assert(amaf_[cell_id] == NULL);
 #endif
     AMAFRecord * records = amaf_alloc(n_stones_);
-    amaf_[cell_index] = records;
+    amaf_[cell_id] = records;
     for (U32 i = 0; i < n_stones_; i++)
         records[i].init_generated();
     return records;
 }
 
 
-U32 AMAFTable::get_n_playouts(U32 cell_index, U32 stone_index) {
+U32 AMAFTable::get_n_playouts(U32 cell_id, U32 stone_index) {
     if (amaf_.empty())
         return 0;
-    AMAFRecord * records = amaf_[cell_index];
+    AMAFRecord * records = amaf_[cell_id];
     if (records == NULL)
         return 0;    
     return records[stone_index].n_playouts_;
 }
 
-Real AMAFTable::get_value(U32 cell_index, U32 stone_index) {
+Real AMAFTable::get_value(U32 cell_id, U32 stone_index) {
 #ifdef DEBUG_
-    assert(amaf_.size() > 0 && amaf_[cell_index] != NULL);
+    assert(amaf_.size() > 0 && amaf_[cell_id] != NULL);
 #endif
-    AMAFRecord& record = amaf_[cell_index][stone_index];
+    AMAFRecord& record = amaf_[cell_id][stone_index];
 #ifdef DEBUG_
     assert(record.n_playouts_ != 0);
 #endif
     return (Real)record.n_wins_ / (Real)record.n_playouts_;
 }
 
-void AMAFTable::update(U32 cell_index, U32 stone_index, bool win) {
+void AMAFTable::update(U32 cell_id, U32 stone_index, bool win) {
     check_initialised();
-    AMAFRecord * records = amaf_[cell_index];
+    AMAFRecord * records = amaf_[cell_id];
     if (records == NULL)
-        records = cell_init(cell_index);
+        records = cell_init(cell_id);
     AMAFRecord& record = records[stone_index];
     if (record.n_playouts_ == 0) {
-        record.init(cell_index, stone_index, win);
-        list_.push_back(record);
+        record.init(cell_id, stone_index, win);
+        list_.push_back(&record);
     } else {
         record.n_wins_ += win;
         record.n_playouts_++;
@@ -77,17 +76,14 @@ void AMAFTable::update(U32 cell_index, U32 stone_index, bool win) {
     }
 }
 
-
-/*void AMAFTable::get_best(U32& cell_index, U32& stone_index) {
-    if (heap_.empty()) {
-        cell_index = NO_CELL;
-        return;
+void AMAFTable::print(FILE * f) const {
+    fprintf(f, "Printing AMAF table\n");
+    for (U32 i = 0; i < list_.size(); i++) {
+        AMAFRecord * record = list_[i];
+        Real val = (Real)record->n_wins_ / (Real)record->n_playouts_;
+        char cell_str[5];
+        cell_id_to_name(record->cell_id_, cell_str);
+        fprintf(f, "%s@%u (%u): %.4lf\n", cell_str, record->stone_index_, record->n_playouts_, val);
     }
-    AMAFRecord * record = heap_[0];
-    cell_index = record->cell_index_;
-    stone_index = record->stone_index_;
-    //record->tried_ = true;
-    //pop_heap();
-}*/
-
-
+}
+       

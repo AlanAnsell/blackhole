@@ -3,14 +3,54 @@
 #include "MCTS.h"
 
 
-void analyse_pos(Position& pos) {
+void parse_args(int argc, char ** argv) {
+    for (int i = 1; i < argc; i++) {
+        char * arg = argv[i];
+        if (! strcmp(arg, "-a"))
+            ANALYSE = true;
+        else if (! strcmp(arg, "-s"))
+            ANALYSE_WITH_SOLVER = true;
+        else if (! strcmp(arg, "-p"))
+            PLAYOUT = true;
+        else if (sscanf(arg, "-alpha=%d", &INIT_ALPHA) == 0) {}
+    }
+}
+
+
+void read_game(Position& pos) {
     char move_str[10];
     while (scanf("%s", move_str) == 1) {
         Move move = move_from_str(move_str);
         pos.make_move(move, false);
     }
-    fprintf(stderr, "Analysing...\n");
-    fflush(stderr);
+}
+
+
+void playout(Position& pos) {
+    pos.print(stderr);
+    U32 n_moves_made = pos.n_moves_made_;
+    for (U32 i = 0; i < 30; i++) {
+        fprintf(stderr, "Playout %u:", i + 1);
+        pos.save_history();
+        while (! pos.is_winning(RED) && ! pos.is_winning(BLUE)) {
+            U64 valid, duo;
+            pos.get_validity_mask(valid, duo);
+            Move move = pos.get_default_policy_move(valid, duo);
+            char move_str[20];
+            move_to_str(move, move_str);
+            fprintf(stderr, " %s", move_str);
+            pos.make_move(move, false);
+        }
+        if (pos.is_winning(RED))
+            fprintf(stderr, " (RED)\n");
+        else
+            fprintf(stderr, " (BLUE)\n");
+        pos.rewind_to(n_moves_made);
+    }
+}
+
+
+void analyse_pos(Position& pos) {
     pos.print(stderr);
     MCTSearch search(0);
     search.analyse(pos);
@@ -19,18 +59,15 @@ void analyse_pos(Position& pos) {
 
 int main(int argc, char** argv) {
     time_started = get_time();
-    if (argc > 1) {
+    parse_args(argc, argv);
+    /*if (argc > 1) {
         int millis;
         if (sscanf(argv[1], "-t=%d", &millis) == 1) {
             time_limit = 1000LL * (long long)millis;
             time_left = (49 * time_limit) / 50;
         }
-    }
-	fprintf(stderr, "Before init\n");
-    fflush(stderr);
+    }*/
     init();
-	fprintf(stderr, "After init\n");
-    fflush(stderr);
 	init_free_list();
     init_amaf_free_list();
     	
@@ -41,25 +78,23 @@ int main(int argc, char** argv) {
         blocked[i] = cell_name_to_id(cell_str);
     }
     
-	fprintf(stderr, "Making position\n");
-    fflush(stderr);
-    Position pos(blocked, 0);
-	fprintf(stderr, "Made position\n");
-    fflush(stderr);
-    if (argc > 1 && ! strcmp(argv[1], "-a")) {
-        fprintf(stderr, "About to analyse\n");
-        fflush(stderr);
+    Position pos(blocked, INIT_ALPHA);
+    if (ANALYSE || PLAYOUT)
+        read_game(pos);
+    if (PLAYOUT) {
+        playout(pos);
+        return 0;
+    }
+    if (ANALYSE) {
         analyse_pos(pos);
         return 0;
     }
-    fprintf(stderr, "Didn't analyse\n");
-    fflush(stderr);
 
     char move_str[100];
     get_move(move_str);
     if (strcmp(move_str, "Start"))
         pos.make_move(move_from_str(move_str), false);
-	Value alpha = 0;
+	Value alpha = INIT_ALPHA;
     while (pos.open_.len_ > 1) {
         fprintf(stderr, "Time left: %.2f seconds\n", (float)(time_left - (get_time() - time_started)) / 1e6);
 #ifdef DEBUG_

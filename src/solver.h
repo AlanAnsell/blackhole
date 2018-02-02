@@ -197,11 +197,16 @@ std::pair<U32, Move> Position::get_optimal_move(long long end_time, U32& counter
     }
     
     if (winning_moves.size()) {
-        fprintf(stderr, "%u optimal moves\n", (U32)winning_moves.size());
+        fprintf(stderr, "%u optimal moves:\n", (U32)winning_moves.size());
         Move best_move = 0;
         Real best_val = -1000.0;
         for (i = 0; i < winning_moves.size(); i++) {
             move = winning_moves[i];
+#ifdef DEBUG_
+            char move_str[20];
+            move_to_str(move, move_str);
+            fprintf(stderr, "%s\n", move_str);
+#endif
             make_move(move, true);
             Real val = calculate_expectation();
             unmake_move();

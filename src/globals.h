@@ -84,4 +84,9 @@ extern const Real CHOOSE_TARGET_THRESH[2];
 extern Real SQRT[MAX_SIMS];
 extern Real SQRT_LOG[MAX_SIMS];
 
+extern bool ANALYSE_WITH_SOLVER;
+extern bool ANALYSE;
+extern bool PLAYOUT;
+extern Value INIT_ALPHA;
+
 #endif

@@ -342,16 +342,23 @@ Move Position::get_default_policy_move(U64 valid, U64 duo) {
     if (cell_id == worst_stale_)
         stone_index = 0;
     else {
+        for (i = 0; i < n_stones; i++)
+            tickets[i] = 0;
         if (duo & mask) {
             tickets[0] = 1;
             total_tickets = 1;
             U32 adj_id = get_non_stale_adj(adj_[cell_id], 0);
             Value adj_value = value_[adj_id] * m_;
             Value extra_req = m_ * (alpha_ - OFFSET[turn_]) - adj_value;
-            for (i = 1; i < n_stones && stones[i] < extra_req; i++) {}
-            if (i < n_stones) {
-                tickets[i] = 3;
-                total_tickets += 3;
+            //char cell_str[5];
+            //cell_id_to_name(cell_id, cell_str);
+            //fprintf(stderr, " **%s(%d)** ", cell_str, extra_req);
+            if (stones[0] < extra_req) {
+                for (i = 1; i < n_stones && stones[i] < extra_req; i++) {}
+                if (i < n_stones) {
+                    tickets[i] = 3;
+                    total_tickets += 3;
+                }
             }
         } else {
             total_tickets = 0;

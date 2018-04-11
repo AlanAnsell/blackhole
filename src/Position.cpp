@@ -165,22 +165,17 @@ void Position::restore_history() {
 
 void Position::make_move(Move move, bool save) {
 #ifdef DEBUG_
-    if (! is_legal(move)) {
-        char move_str[20];
-        fprintf(stderr, "Making move\n");
-        print(stderr);
-        move_to_str(move, move_str);
-        fprintf(stderr, "%s\n", move_str);
-        fflush(stderr);
-    }
     assert(is_legal(move));
 #endif
     if (save)
         save_history();
     moves_made_[n_moves_made_] = move;
+    
     U32 cell_id = GET_CELL(move);
     Value stone_number = (Value)GET_STONE_NUMBER(move);
     Value stone_value = m_ * stone_number;
+    
+    // remove the stone from the current player's list of stones
     Value * stones = stones_[turn_];
     U32 * stone_loc = stone_loc_[turn_];
     U32& n_stones = n_stones_[turn_];
@@ -194,14 +189,17 @@ void Position::make_move(Move move, bool save) {
     }
     stone_masks_[turn_] ^= (1 << (stone_number - 1));
     power_[turn_] = STONE_POWER[turn_][stone_masks_[turn_]];
+
     turn_ ^= 1;
     m_ *= -1;
     n_moves_made_++;
 
+    // remove the cell from the list of empty cells
     U64 cell_mask = MASK(cell_id);
     open_mask_ ^= cell_mask;
     open_.remove(cell_id);
     
+    // check if the cell begin filled is controlled, dead or stale
     if (controls_ & cell_mask)
         n_controls_[BLUE]--;
     else
@@ -213,14 +211,15 @@ void Position::make_move(Move move, bool save) {
                 n_stale_[p]--;
         }
     }
+
+    // update adjacencies and values of neighbouring cells
     fill(cell_id, stone_value);
     
+    // update other fields of neighbouring cells
     List& adj = adj_[cell_id];
-    //bool is_stale = (cell_mask & stale_[RED]) || (cell_mask & stale_[BLUE]);
     for (i = 0; i < adj.len_; i++) {
         U32 adj_id = adj.val_[i];
         U64 adj_mask = MASK(adj_id);
-        //if (! is_stale)
         effective_adj_[adj_id]--;
         bool new_control = (value_[adj_id] < alpha_);
         bool old_control = (controls_ & adj_mask);
@@ -231,6 +230,7 @@ void Position::make_move(Move move, bool save) {
         }
     }
     
+    // find new dead and stale cells
     for (i = 0; i < open_.len_; i++) {
         U32 open_id = open_.val_[i];
         U64 open_mask = MASK(open_id);
@@ -246,19 +246,10 @@ void Position::make_move(Move move, bool save) {
     }
     find_stale_cells();
     find_worst_stale();
+
 #ifdef DEBUG_
     assert((dead_[RED] & dead_[BLUE]) == 0LL);
     assert((stale_[RED] & stale_[BLUE]) == 0LL);
-    if (n_stale_[RED] > n_dead_[RED]) {
-        print(stderr);
-        fprintf(stderr, "Red: %u stale, %u dead\n", n_stale_[RED], n_dead_[RED]);
-        fflush(stderr);
-    }
-    if (n_stale_[BLUE] > n_dead_[BLUE]) {
-        print(stderr);
-        fprintf(stderr, "Red: %u stale, %u dead\n", n_stale_[BLUE], n_dead_[BLUE]);
-        fflush(stderr);
-    }
     assert(n_stale_[RED] <= n_dead_[RED]);
     assert(n_stale_[BLUE] <= n_dead_[BLUE]);
 #endif
@@ -266,6 +257,7 @@ void Position::make_move(Move move, bool save) {
 
 
 void Position::regress_board() {
+    // go back one move (changing only those fields not stored in PositionHistory)
     n_moves_made_--;
     turn_ ^= 1;
     m_ *= -1;
@@ -279,6 +271,7 @@ void Position::regress_board() {
 
 
 void Position::rewind_to(U32 n_moves_made) {
+    // go back to a previous state in the game
     while (n_moves_made_ > n_moves_made)
         regress_board();
     restore_history();
@@ -301,6 +294,10 @@ Move Position::get_default_policy_move(U64 valid, U64 duo) {
     U32 cell_id;
     U32 op = 1 - turn_;
     U64 mask;
+
+    // first choose which cell to play in. Perform a lottery in which
+    // each cell gets a number of tickets equal to its number of non-dead neighbours
+    // plus or minus one depending on whether the cell itself is dead
     for (i = 0; i < open_.len_; i++) {
         tickets[i] = 0;
         cell_id = open_.val_[i];
@@ -327,15 +324,14 @@ Move Position::get_default_policy_move(U64 valid, U64 duo) {
         total_tickets++;
     }
 #ifdef DEBUG_
-    if (total_tickets == 0)
-        print(stderr);
     assert(total_tickets > 0);
 #endif
      
     U32 cell_index = lottery(tickets, total_tickets);
     cell_id = open_.val_[cell_index];
     mask = MASK(cell_id);
-    
+   
+    // now choose which stone to use
     Value * stones = stones_[turn_];
     U32 n_stones = n_stones_[turn_];
     U32 stone_index;
@@ -350,9 +346,6 @@ Move Position::get_default_policy_move(U64 valid, U64 duo) {
             U32 adj_id = get_non_stale_adj(adj_[cell_id], 0);
             Value adj_value = value_[adj_id] * m_;
             Value extra_req = m_ * (alpha_ - OFFSET[turn_]) - adj_value;
-            //char cell_str[5];
-            //cell_id_to_name(cell_id, cell_str);
-            //fprintf(stderr, " **%s(%d)** ", cell_str, extra_req);
             if (stones[0] < extra_req) {
                 for (i = 1; i < n_stones && stones[i] < extra_req; i++) {}
                 if (i < n_stones) {
@@ -363,22 +356,12 @@ Move Position::get_default_policy_move(U64 valid, U64 duo) {
         } else {
             total_tickets = 0;
             for (i = n_stale_[op]; i < n_stones; i++) {
-                //U32 changes;
-                //for (changes = 0; changes < n_uncontrolled && stones[i] <= reqs[changes]; changes++) {}
-                tickets[i] = /*20 * (changes + 1) -*/ stones[i];
+                // assign a higher probability to using a more valuable stone
+                tickets[i] = stones[i];
                 total_tickets += tickets[i];
             }
         }
 #ifdef DEBUG_
-        if (total_tickets == 0) {
-            char cell_str[5];
-            cell_id_to_name(cell_id, cell_str);
-            fprintf(stderr, "Cell chosen: %s\n", cell_str);
-            print(stderr);
-            fprintf(stderr, "Red: %u stale, %u dead\n", n_stale_[RED], n_dead_[RED]);
-            fprintf(stderr, "Blue: %u stale, %u dead\n", n_stale_[BLUE], n_dead_[BLUE]);
-            fflush(stderr);
-        }
         assert(total_tickets > 0);
 #endif
         stone_index = lottery(tickets, total_tickets);
@@ -504,20 +487,14 @@ void Position::get_all_reasonable_moves_with_stone(U32 stone_index, U64 valid, U
 }
 
 
-#ifdef SOLVER_IMPL_
-#include SOLVER_IMPL_
-#else
 #include "solver.h"
-#endif
+
 
 void Position::generate_untried_moves(int& stone_index, U64 valid, U64 duo,
         std::vector<Move>& untried_children) {
-    // untried_children should be empty
 #ifdef DEBUG_
     assert(untried_children.empty());
 #endif
-    //if (valid == 0)
-    //    get_validity_mask(valid, duo);
     U32 i;
     U32 op = 1 - turn_;
     while (untried_children.size() == 0 && stone_index >= 0) {
@@ -555,18 +532,6 @@ void Position::generate_untried_moves(int& stone_index, U64 valid, U64 duo,
         stone_index--;
     }
 }
-
-
-/*bool Position::all_adj_dead(U32 cell_id) {
-    List& adj = adj_[cell_id];
-    U32 n_adj = adj.len_;
-    for (U32 i = 0; i < n_adj; i++) {
-        U64 adj_mask = MASK(adj.val_[i]);
-        if (! (dead_[RED] & adj_mask) && ! (dead_[BLUE] & adj_mask))
-            return false;
-    }
-    return true;
-}*/
 
 
 void Position::set_alpha(Value alpha) {

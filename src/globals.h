@@ -23,6 +23,7 @@
 #define MIN_RESULT -75
 #define MAX_RESULT 75
 #define NO_CELL 400
+#define VALUE_INF 1000
 #define TIME_ELAPSED 2
 
 #define MASK(x) (1LL << (U64)(x))

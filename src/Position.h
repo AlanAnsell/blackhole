@@ -5,10 +5,17 @@
 #include "AMAF.h"
 
 class List {
+    /*
+     * Stores a subset of the values 0...max_len-1 which supports constant time insertion and deletion
+     * and maintains its order when an item is deleted and re-added assuming that items
+     * are re-added in the reverse order in which they were deleted.
+     *
+     * It's possible that a bitmask would work better in hindsight.
+     */
 public:
-    U32 * val_;
-    U32 * loc_;
-    U32 len_;
+    U32 * val_; // list of cell indices
+    U32 * loc_; // loc_[i] = j <=> val_[j] = i
+    U32 len_; // size of list
 
     List(): val_(NULL), loc_(NULL), len_(0) {}
 
@@ -24,6 +31,7 @@ public:
     }
 
     inline void add(U32 val) {
+        // can only be called before remove or readd
         loc_[val] = len_;
         val_[len_] = val;
         len_++;
@@ -61,24 +69,12 @@ Move move_from_str(char * move_str);
 
 void move_to_str(Move move, char * str);
 
-/*class Move {
-public:
-    U32 cell_;
-    Value stone_value_;
-
-    Move(): cell_(0), stone_value_(0) {}
-
-    Move(U32 cell, Value stone_value): cell_(cell), stone_value_(stone_value) {}
-
-    Move(char * move_str, U32 turn);
-
-    void to_str(char * str) const;
-
-    bool operator < (const Move& other) const;
-};*/
-
-
 struct PositionHistory {
+    /*
+     * All the data stored in a Position which is easier to cache and restore than to
+     * recalculate when unmaking a move.
+     */
+    
     // These variables are changed by make_move and restore_history
     U64 open_mask_;
     Value value_[N_CELLS];
@@ -87,7 +83,6 @@ struct PositionHistory {
     U32 stone_loc_[2][N_STONES+1];
     U32 n_stones_[2];
 	Value * power_[2];
-    
     
     // These variables are changed by make_move, restore_history and set_alpha
     U64 controls_;
@@ -168,24 +163,35 @@ class MoveInfo;
 
 class Position {
 public:
-    // These variables are changed by make_move and regress_move
+    //***These variables are changed by make_move and regress_move***
+    // list of currently empty cells
     List open_;
+    // list of empty neighbours for each cell
     List adj_[N_CELLS];
     U32 turn_;
     U32 n_moves_made_;
+    // -1 if blue to move, 1 if red
     int m_;
     
-    // These variables are changed by make_move and restore_history
+    //***These variables are changed by make_move and restore_history***
+    // bitmask of empty cells
     U64 open_mask_;
+    // sum of values of stones adjacent to each cell
     Value value_[N_CELLS];
+    // stones not yet played by each player
 	Value stones_[2][N_STONES];
+    // bitmask of stones not yet played by each player
 	U32 stone_masks_[2];
+    // maps stone values to their index in stones_
     U32 stone_loc_[2][N_STONES+1];
+    // number of stones left for each player
     U32 n_stones_[2];
+    // power_[p][i] = sum of player p's most valuable i stones
 	Value * power_[2];
     
     
-    // These variables are changed by make_move, restore_history and set_alpha
+    //***These variables are changed by make_move, restore_history and set_alpha***
+    // bitmasks for control, death and staleness
     U64 controls_;
     U32 n_controls_[2];
     U64 dead_[2];
@@ -193,9 +199,12 @@ public:
     U64 either_stale_;
     U64 stale_[2];
     U32 n_stale_[2];
+    // number of non-stale neighbours for each cell
     U32 effective_adj_[N_CELLS];
+    // index of worst stale cell (i.e. the only one the current player could reasonably play in)
     U32 worst_stale_;
-    // This variable is changed only by set_alpha
+    
+    //***This variable is changed only by set_alpha***
     Value alpha_;
 
     // History variables
@@ -270,20 +279,18 @@ public:
 
     void print(FILE * f) const;
         
-    /*inline std::pair<U32, U32> get_cell_and_stone_indices(Move move) {
-        return std::pair<U32, U32>(open_.loc_[GET_CELL(move)],
-                                         stone_loc_[turn_][GET_STONE_NUMBER(move)]);
-    }*/
-
+    // updates variables relating to staleness
     inline void find_stale_cells() {
         U64 dead = open_mask_ & (dead_[RED] | dead_[BLUE]);
         U64 dead_it = dead;
-        //U64 stale = open_mask_ & either_stale_; 
+        // a cell can only be stale if it is dead
         while (dead_it) {
             U64 lsb = LSB(dead_it);
             dead_it ^= lsb;
+            // check the cell has not already been identified as stale
             if (! (either_stale_ & lsb)) {
                 U64 adj_mask = ADJ_MASK[INDEX(lsb)] & open_mask_;
+                // cell is stale if all neighbours are dead
                 if ((dead & adj_mask) == adj_mask) {
                     if (dead_[RED] & lsb) {
                         stale_[RED] |= lsb;
@@ -292,6 +299,7 @@ public:
                         stale_[BLUE] |= lsb;
                         n_stale_[BLUE]++;
                     }
+                    // decrement effective_adj_ for all neighbours
                     while (adj_mask) {
                         lsb = LSB(adj_mask);
                         adj_mask ^= lsb;
@@ -305,7 +313,7 @@ public:
 
     inline void find_worst_stale() {
         worst_stale_ = NO_CELL;
-        Value worst_val = 1000;
+        Value worst_val = VALUE_INF;
         U64 stale = either_stale_ & open_mask_;
         while (stale) {
             U64 lsb = LSB(stale);
@@ -332,12 +340,18 @@ public:
         }
     }
 
+    // checks whether a cell is dead if favour of player p, i.e. whether the cell's value
+    // will definitely be worse than the target if it becomes the black hole.
     inline bool is_dead(U32 cell_id, U32 p) const {
         U32 op = 1 - p;
         Value * other_power = power_[op];
         Value value = value_[cell_id];
+        // the maximum number of stones the opponent can place adjacent to this stone
+        // in the future
         U32 n_adj = std::min(n_stones_[op], adj_[cell_id].len_);
+        // the worst-case value of the cell at the end of the game
         Value worst_val = PARITY[p] * (value + other_power[n_adj]);
+        // check if the worst-case value is still as good as or better than the target
         return (worst_val >= PARITY[p] * (alpha_ - OFFSET[p]));
     }
 
@@ -345,6 +359,7 @@ public:
         return n_dead_[p] > n_stones_[1 - p];
     }
 
+    // gets the nth non-stale cell in a list
     inline U32 get_non_stale_adj(const List& adj, U32 n) const {
         U32 count = 0;
         U32 i;
@@ -358,15 +373,7 @@ public:
             }
         }
 #ifdef DEBUG_
-        fprintf(stderr, "Assertion in get_non_stale_adj going to fail (n=%u)\n", n);
-        print(stderr);
-        fprintf(stderr, "Adj list:");
-        for (i = 0; i < adj.len_; i++) {
-            char cell_str[5];
-            cell_id_to_name(adj.val_[i], cell_str);
-            fprintf(stderr, " %s", cell_str);
-        }
-        fprintf(stderr, "\n");
+        // n should always be less than the length of the list
         assert(false);
 #endif
         return NO_CELL;
@@ -379,16 +386,25 @@ public:
         return false;
     }
 
+    // determines whether there is any reasonable move in a particular cell
     inline bool is_valid(U32 cell_id, bool& duo) const {
         duo = false;
         U64 mask = MASK(cell_id);
+        
+        // it's only reasonable to play in a stale cell if it's the least favourable one for you
         if (either_stale_ & mask)
             return cell_id == worst_stale_;
+        
+        // if all your remaining stones have to go in dead cells, then don't play in a non-dead
+        // cell
         if (n_stones_[turn_] == n_dead_[1-turn_] &&
                 ! (dead_[1-turn_] & mask))
             return false;
+
+        // all other unreasonable moves we detect involve cells with two or fewer neighbours
         if (effective_adj_[cell_id] > 2)
             return true;
+
         const List& adj = adj_[cell_id];
         Value val = m_ * value_[cell_id];
         U32 adj_id;
@@ -397,22 +413,30 @@ public:
             adj_id = get_non_stale_adj(adj, 0);
             adj_val = m_ * value_[adj_id];
             if (effective_adj_[adj_id] == 1) {
+                // the cell is one of an isolated pair, so it is only reasonable to play in it
+                // if it has a value not better than its neighbour's
                 duo = true;
                 return (val < adj_val) || (val == adj_val && cell_id < adj_id);
             }
+
             const List& adj_adj = adj_[adj_id];
             U64 we_control;
             if (turn_ == RED)
                 we_control = ~controls_;
             else
                 we_control = controls_;
-            if (we_control & MASK(cell_id))
+            // there's never any point playing in a cell which we control which has a single neighbour
+            // which itself has several neighbours because it is never worse to play in said
+            // neighbour 
+            if (we_control & mask)
                 return false;
+            
             if (effective_adj_[adj_id] == 2) {
                 U32 adj_adj_id = get_non_stale_adj(adj_adj, 0);
                 if (adj_adj_id == cell_id)
                     adj_adj_id = get_non_stale_adj(adj_adj, 1);
                 if (effective_adj_[adj_adj_id] == 1) {
+                    // if we have a line of 3 isolated cells, only play at the least favourable end
                     Value adj_adj_val = value_[adj_adj_id];
                     return (val < adj_adj_val) || (val == adj_adj_val && cell_id < adj_adj_id);
                 }
@@ -425,6 +449,8 @@ public:
                 U32 adj2_id = get_non_stale_adj(adj, 1);
                 const List& adj2 = adj_[adj2_id];
                 if (effective_adj_[adj2_id] == 2 && is_adj(adj2, adj1_id)) {
+                    // if we have an isolated triangle shape, only play in the worst cell
+                    // of the triangle
                     Value other_val = m_ * value_[adj1_id];
                     if (other_val < val || (other_val == val && adj1_id < cell_id))
                         return false;
@@ -439,32 +465,19 @@ public:
 
     
     inline bool is_reasonable_move(U32 cell_id, U32 stone_index, U64 valid, U64 duo) const {
-        //Value stone_value = m_ * stone_number;
-       
-        //U32 op = 1 - turn_; 
         U64 mask = MASK(cell_id);
-        //if (either_stale_ & MASK(cell_id))
-        //    return cell_id == worst_stale_;
-        /*if (stale_[op] & mask)
-            //TODO: allow only the worst stale cell to be filled
-            return stone_index == 0;
-        if (stale_[turn_] & mask)
-            return stone_index == 0 && dead_[turn_] == open_mask_;*/
-
-        //U32 n_stones = n_stones_[turn_];
-        //if (n_stones == n_dead_[op] && ! (dead_[op] & mask))
-        //    return false;
-
+        
+        // first check that it is reasonable to play in the cell
         if (! (valid & mask))
             return false;
         
+        // only put your least valuable stone in a stale cell
         if (cell_id == worst_stale_)
             return stone_index == 0;
-        //bool duo = false;
-        //if (! is_valid(cell_id, duo))
-        //    return false;
 
         if (duo & mask) {
+            // if you play in an isolated pair, only use your least valuable stone or
+            // the least valuable stone needed to control the adjacent stone
             if (stone_index == 0)
                 return true;
             Value stone_number = stones_[turn_][stone_index];
@@ -480,6 +493,7 @@ public:
  
 
     void get_validity_mask(U64& valid, U64& duo) const {
+        // get all cells which are reasonable to play in
         valid = 0;
         duo = 0;
         for (U32 i = 0; i < open_.len_; i++) {

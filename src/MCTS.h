@@ -8,6 +8,7 @@
 
 class MCTNode {
 public:
+    // the move made in order to enter this position
     Move move_;
     MCTNode * parent_;
 
@@ -16,15 +17,12 @@ public:
     U32 n_red_wins_;
     U32 n_playouts_;
     
+    //  
     bool fully_explored_;
     bool expanded_;
     bool all_children_generated_;
     std::vector<Move> untried_children_;
-    //bool cached_child_;
-    //U32 cached_cell_index_;
-    //U32 cached_stone_index_;
         
-    //bool get_untried_failed_;
     int untried_stone_index_;
     U64 valid_;
     U64 duo_;

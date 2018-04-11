@@ -44,6 +44,11 @@ void MCTNode::init(MCTNode * parent, const Position& pos, Move move, Value alpha
     solver_time_ = 0;
 
     tried_ = std::vector<U16>(N_CELLS, 0);
+
+#ifdef NO_AMAF_PRIMING
+    amaf_.init(pos.n_stones_[pos.turn_]);
+    my_amaf_ = & amaf_;    
+#else
     par_amaf_ = par_amaf;
     amaf_[RED].init(pos.n_stones_[RED]);
     amaf_[BLUE].init(pos.n_stones_[BLUE]);
@@ -52,6 +57,7 @@ void MCTNode::init(MCTNode * parent, const Position& pos, Move move, Value alpha
     else
         // this node is the root of the search tree
         my_amaf_ = & amaf_[pos.turn_];
+#endif
 }
 
 
@@ -78,9 +84,11 @@ void MCTNode::get_best_from_amaf(U32& cell_id, U32& stone_index, Position& pos) 
 
 
 MCTNode * MCTNode::select(Position& pos) {
+#ifndef NO_AMAF_PRIMING
     if (n_playouts_ >= AMAF_SWITCH_THRESH)
         // switch from using the primed AMAF table to this node's own table
         my_amaf_ = & amaf_[pos.turn_];
+#endif
     MCTNode * best_node = NULL;
     Real best_node_value = -1000.0, child_val;
     U32 i;
@@ -162,7 +170,11 @@ MCTNode *  MCTNode::add_child(Position& pos, Move move) {
     tried_[GET_CELL(move)] |= (1 << pos.stone_loc_[pos.turn_][GET_STONE_NUMBER(move)]);
     pos.make_move(move, true);
     MCTNode * child = get_free();
+#ifdef NO_AMAF_PRIMING
+    AMAFTable * child_amaf = NULL;
+#else
     AMAFTable * child_amaf = & amaf_[pos.turn_];
+#endif
     child->init(this, pos, move, alpha_, child_amaf);
     children_.push_back(child);
     pos.unmake_move();
@@ -287,9 +299,13 @@ void MCTNode::simulate(Position& pos) {
         U32 last_move = std::min(move_count, depth + AMAF_HORIZON);
         for (i = depth; i < last_move; i += 2) {
             U32 stone_index = pos.stone_loc_[pos.turn_][GET_STONE_NUMBER(simulation[i])];
+#ifdef NO_AMAF_PRIMING
+            AMAFTable * own_amaf = search_root->my_amaf_;
+#else
             if (search_root->par_amaf_ != NULL)
                 search_root->par_amaf_->update(GET_CELL(simulation[i]), stone_index, result != pos.turn_);
             AMAFTable * own_amaf = & search_root->amaf_[pos.turn_];
+#endif
             own_amaf->update(GET_CELL(simulation[i]), stone_index, result != pos.turn_);
         }
         

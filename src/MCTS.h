@@ -39,10 +39,15 @@ public:
 
     // tried_ is indexed first by cell ID, then by stone index
     std::vector<U16> tried_;
+#ifdef NO_AMAF_PRIMING
+    AMAFTable amaf_;
+    AMAFTable * my_amaf_;
+#else
     AMAFTable amaf_[2];
     AMAFTable * my_amaf_;
     AMAFTable * par_amaf_;
-
+#endif
+    
     void init(MCTNode * parent, const Position& pos, Move move, Value alpha, AMAFTable * my_amaf);
 
     void get_best_from_amaf(U32& cell_id, U32& stone_index, Position& pos);

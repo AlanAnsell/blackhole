@@ -95,6 +95,9 @@ void init() {
 #ifndef DEBUG_
     srand(time(NULL));
 #endif
+#ifdef NO_AMAF_PRIMING
+    fprintf(stderr, "AMAF priming OFF\n");
+#endif
 
     U32 id = 0;
     U32 row, num;
